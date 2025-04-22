@@ -1,6 +1,4 @@
-from rest_framework import generics, permissions
-from rest_framework.filters import SearchFilter
-from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import generics, permissions, filters
 from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription
 from .serializers import (
     SpecialtySerializer, DoctorSerializer, DoctorReviewSerializer,
@@ -16,7 +14,7 @@ class DoctorListView(generics.ListAPIView):
     queryset = Doctor.objects.filter(is_verified=True)
     serializer_class = DoctorSerializer
     permission_classes = [permissions.AllowAny]
-    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filter_backends = [filters.SearchFilter]
     filterset_fields = ['specialties', 'is_available_for_virtual']
     search_fields = ['first_name', 'last_name', 'bio']
 

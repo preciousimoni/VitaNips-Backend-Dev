@@ -1,6 +1,4 @@
-from rest_framework import generics, permissions
-from rest_framework.filters import SearchFilter
-from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import generics, permissions, filters
 from .models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationReminder
 from .serializers import (
     PharmacySerializer, MedicationSerializer, PharmacyInventorySerializer,
@@ -11,14 +9,14 @@ class PharmacyListView(generics.ListAPIView):
     queryset = Pharmacy.objects.all()
     serializer_class = PharmacySerializer
     permission_classes = [permissions.AllowAny]
-    filter_backends = [SearchFilter]
+    filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'address']
 
 class MedicationListView(generics.ListAPIView):
     queryset = Medication.objects.all()
     serializer_class = MedicationSerializer
     permission_classes = [permissions.AllowAny]
-    filter_backends = [SearchFilter]
+    filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'generic_name']
 
 class PharmacyInventoryListView(generics.ListAPIView):
