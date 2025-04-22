@@ -42,6 +42,21 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
+class UserUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            'first_name', 'last_name', 'phone_number', 'date_of_birth',
+            'profile_picture', 'blood_group', 'allergies', 'chronic_conditions',
+            'weight', 'height', 'emergency_contact_name',
+            'emergency_contact_relationship', 'emergency_contact_phone'
+        ]
+        extra_kwargs = {
+            'profile_picture': {'required': False},
+            'allergies': {'required': False},
+            'chronic_conditions': {'required': False}
+        }
+
 class MedicalHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicalHistory
