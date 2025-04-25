@@ -63,3 +63,10 @@ class PrescriptionListView(generics.ListAPIView):
 
     def get_queryset(self):
         return Prescription.objects.filter(user=self.request.user)
+    
+class PrescriptionDetailView(generics.RetrieveAPIView):
+    serializer_class = PrescriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Prescription.objects.filter(user=self.request.user)
