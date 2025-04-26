@@ -48,8 +48,18 @@ class AppointmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'created_at', 'updated_at']
 
     def validate(self, data):
-        if data['start_time'] >= data['end_time']:
-            raise serializers.ValidationError("End time must be after start time.")
+        instance = getattr(self, 'instance', None)
+
+        start_time = data.get('start_time', instance.start_time if instance else None)
+        end_time = data.get('end_time', instance.end_time if instance else None)
+
+        if start_time is not None and end_time is not None:
+            if start_time >= end_time:
+                raise serializers.ValidationError({
+                    "detail": "End time must be after start time.",
+                    "start_time": f"Start time ({start_time}) cannot be after or equal to end time ({end_time}).",
+                    "end_time": f"End time ({end_time}) must be after start time ({start_time}).",
+                })
         return data
 
 class PrescriptionItemSerializer(serializers.ModelSerializer):
