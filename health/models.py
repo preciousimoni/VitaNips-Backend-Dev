@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from doctors.models import Appointment
 
 class VitalSign(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='vital_signs')
@@ -131,3 +132,59 @@ class HealthGoal(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.get_goal_type_display()} - {self.target_value} {self.unit}"
+    
+def user_directory_path(instance, filename):
+    return f'user_{instance.uploaded_by.id}/documents/{filename}'
+
+class MedicalDocument(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='medical_documents',
+        help_text="The patient this document belongs to."
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='uploaded_documents',
+        help_text="User who uploaded the document (patient or doctor)."
+    )
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+    file = models.FileField(
+        upload_to=user_directory_path,
+        help_text="The actual uploaded file."
+    )
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Brief description or title of the document."
+    )
+    document_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="e.g., Lab Result, Scan, Report, Prescription Image"
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        filename = 'Unknown File'
+        if self.file:
+            try:
+                filename = self.file.name.split('/')[-1]
+            except Exception:
+                filename = str(self.file)
+        return f"Document for {self.user.email} - {filename}"
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = "Medical Document"
+        verbose_name_plural = "Medical Documents"

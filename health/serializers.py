@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal
+from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
+from users.serializers import UserSerializer
 
 class VitalSignSerializer(serializers.ModelSerializer):
     class Meta:
@@ -58,3 +59,56 @@ class HealthGoalSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
+        
+class MedicalDocumentSerializer(serializers.ModelSerializer):
+    # uploaded_by_email = serializers.ReadOnlyField(source='uploaded_by.email')
+    file_url = serializers.SerializerMethodField()
+    filename = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MedicalDocument
+        fields = [
+            'id',
+            'user',
+            'uploaded_by',
+            # 'uploaded_by_email', # Optional user-friendly display
+            'appointment',
+            'file',
+            'file_url',
+            'filename',
+            'description',
+            'document_type',
+            'uploaded_at',
+        ]
+        read_only_fields = [
+            'user',
+            'uploaded_by',
+            'uploaded_at',
+            'file_url',
+            'filename',
+        ]
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if obj.file and request:
+            return request.build_absolute_uri(obj.file.url)
+        elif obj.file:
+             try:
+                 return obj.file.url
+             except Exception:
+                 return None
+        return None
+
+    def get_filename(self, obj):
+        """Return the base filename."""
+        if obj.file:
+            try:
+                return obj.file.name.split('/')[-1]
+            except Exception:
+                return str(obj.file)
+        return None
+
+    def create(self, validated_data):
+        validated_data.pop('user', None)
+        validated_data.pop('uploaded_by', None)
+        return super().create(validated_data)
