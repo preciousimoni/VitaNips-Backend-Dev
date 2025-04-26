@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
-from decouple import config
+from decouple import config, Csv
 from urllib.parse import urlparse
 import dj_database_url
 import logging
@@ -172,7 +172,8 @@ REST_AUTH = {
 }
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv())
+CORS_ALLOW_CREDENTIALS = True
 
 # Site ID for django-allauth
 SITE_ID = 1
