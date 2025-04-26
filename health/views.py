@@ -1,9 +1,27 @@
 from rest_framework import generics, permissions
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal
+from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
 from .serializers import (
     VitalSignSerializer, SymptomLogSerializer, FoodLogSerializer,
-    ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer
+    ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer, MedicalDocumentSerializer
 )
+from .permissions import IsOwnerOrAssociatedDoctorReadOnly
+
+class MedicalDocumentListCreateView(generics.ListCreateAPIView):
+    serializer_class = MedicalDocumentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return MedicalDocument.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user, uploaded_by=self.request.user)
+
+class MedicalDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = MedicalDocumentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAssociatedDoctorReadOnly]
+
+    def get_queryset(self):
+        return MedicalDocument.objects.filter(user=self.request.user)
 
 class VitalSignListCreateView(generics.ListCreateAPIView):
     serializer_class = VitalSignSerializer

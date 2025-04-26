@@ -67,11 +67,17 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MedicalDocument
-        fields = ['id', 'user', 'uploaded_by',
-            # 'uploaded_by_email', # Optional user-friendly display
-            'appointment', 'file', 'file_url', 'filename', 'description', 'document_type', 'uploaded_at',
+        fields = [
+            'id', 'user', 'uploaded_by', 'appointment', 'file', 'file_url',
+            'filename', 'description', 'document_type', 'uploaded_at',
         ]
-        read_only_fields = ['user' 'uploaded_by', 'uploaded_at', 'file_url', 'filename',]
+        read_only_fields = [
+            'user', # Set automatically in the view
+            'uploaded_by', # Set automatically in the view
+            'uploaded_at',
+            'file_url',
+            'filename',
+        ]
 
     def get_file_url(self, obj):
         request = self.context.get('request')
@@ -92,8 +98,3 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
             except Exception:
                 return str(obj.file)
         return None
-
-    def create(self, validated_data):
-        validated_data.pop('user', None)
-        validated_data.pop('uploaded_by', None)
-        return super().create(validated_data)

@@ -5,7 +5,8 @@ from .views import (
     FoodLogListCreateView, FoodLogDetailView,
     ExerciseLogListCreateView, ExerciseLogDetailView,
     SleepLogListCreateView, SleepLogDetailView,
-    HealthGoalListCreateView, HealthGoalDetailView
+    HealthGoalListCreateView, HealthGoalDetailView,
+    MedicalDocumentListCreateView, MedicalDocumentDetailView,
 )
 
 urlpatterns = [
@@ -21,4 +22,6 @@ urlpatterns = [
     path('sleep-logs/<int:pk>/', SleepLogDetailView.as_view(), name='sleep-log-detail'),
     path('health-goals/', HealthGoalListCreateView.as_view(), name='health-goal-list'),
     path('health-goals/<int:pk>/', HealthGoalDetailView.as_view(), name='health-goal-detail'),
+    path('documents/', MedicalDocumentListCreateView.as_view(), name='medical-document-list'),
+    path('documents/<int:pk>/', MedicalDocumentDetailView.as_view(), name='medical-document-detail'),
 ]
