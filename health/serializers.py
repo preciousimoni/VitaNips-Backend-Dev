@@ -67,26 +67,11 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MedicalDocument
-        fields = [
-            'id',
-            'user',
-            'uploaded_by',
+        fields = ['id', 'user', 'uploaded_by',
             # 'uploaded_by_email', # Optional user-friendly display
-            'appointment',
-            'file',
-            'file_url',
-            'filename',
-            'description',
-            'document_type',
-            'uploaded_at',
+            'appointment', 'file', 'file_url', 'filename', 'description', 'document_type', 'uploaded_at',
         ]
-        read_only_fields = [
-            'user',
-            'uploaded_by',
-            'uploaded_at',
-            'file_url',
-            'filename',
-        ]
+        read_only_fields = ['user' 'uploaded_by', 'uploaded_at', 'file_url', 'filename',]
 
     def get_file_url(self, obj):
         request = self.context.get('request')
