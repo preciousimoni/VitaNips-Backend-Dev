@@ -80,16 +80,20 @@ class MedicationOrder(models.Model):
 class MedicationOrderItem(models.Model):
     order = models.ForeignKey(MedicationOrder, on_delete=models.CASCADE, related_name='items')
     prescription_item = models.ForeignKey(PrescriptionItem, on_delete=models.SET_NULL, null=True, blank=True)
-    medication = models.ForeignKey(Medication, on_delete=models.CASCADE)
+    # medication = models.ForeignKey(Medication, on_delete=models.SET_NULL, null=True, blank=True)
+    medication_name_text = models.CharField(max_length=200, null=True, blank=True, help_text="Medication name as written on prescription")
+    dosage_text = models.CharField(max_length=100, null=True, blank=True, help_text="Dosage as written on prescription")
     quantity = models.PositiveIntegerField(default=1)
-    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
+    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     def __str__(self):
-        return f"Order {self.order.id} - {self.medication.name}"
+        return f"Order {self.order.id} - {self.medication_name_text}"
     
     @property
     def total_price(self):
-        return self.quantity * self.price_per_unit
+        if self.quantity and self.price_per_unit:
+             return self.quantity * self.price_per_unit
+        return None
 
 class MedicationReminder(models.Model):
     FREQUENCY_CHOICES = (

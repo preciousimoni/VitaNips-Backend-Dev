@@ -31,8 +31,8 @@ class MedicationOrderAdmin(admin.ModelAdmin):
 
 @admin.register(MedicationOrderItem)
 class MedicationOrderItemAdmin(admin.ModelAdmin):
-    list_display = ('order', 'medication', 'quantity', 'price_per_unit', 'total_price')
-    search_fields = ('medication__name',)
+    list_display = ('order', 'medication_name_text', 'quantity', 'price_per_unit', 'total_price')
+    search_fields = ('medication_name_text',)
     ordering = ('-order__order_date',)
 
 @admin.register(MedicationReminder)

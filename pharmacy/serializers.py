@@ -30,15 +30,19 @@ class PharmacyInventorySerializer(serializers.ModelSerializer):
         read_only_fields = ['last_updated']
 
 class MedicationOrderItemSerializer(serializers.ModelSerializer):
-    medication = MedicationSerializer(read_only=True)
+    medication_name = serializers.ReadOnlyField(source='medication_name_text')
+    dosage = serializers.ReadOnlyField(source='dosage_text')
 
     class Meta:
         model = MedicationOrderItem
-        fields = ['id', 'order', 'prescription_item', 'medication', 'quantity', 'price_per_unit', 'total_price']
-        read_only_fields = ['total_price']
+        fields = ['id', 'order', 'prescription_item', 'medication_name', 'dosage', 'quantity', 'price_per_unit', 'total_price']
+        read_only_fields = ['total_price', 'order', 'medication_name', 'dosage']
 
 class MedicationOrderSerializer(serializers.ModelSerializer):
     items = MedicationOrderItemSerializer(many=True, read_only=True)
+    # Optionally add nested Pharmacy/User details if needed for display
+    # pharmacy = PharmacySerializer(read_only=True)
+    # user = UserSerializer(read_only=True) # Assuming UserSerializer is available
 
     class Meta:
         model = MedicationOrder
@@ -47,7 +51,7 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
             'delivery_address', 'total_amount', 'order_date', 'pickup_or_delivery_date',
             'notes', 'items'
         ]
-        read_only_fields = ['user', 'order_date']
+        read_only_fields = ['user', 'order_date', 'items', 'status', 'total_amount']
 
 class MedicationReminderSerializer(serializers.ModelSerializer):
     medication = MedicationSerializer(read_only=True)
