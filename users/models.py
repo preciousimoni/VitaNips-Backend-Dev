@@ -20,6 +20,10 @@ class User(AbstractUser):
     emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
     emergency_contact_phone = models.CharField(max_length=15, blank=True, null=True)
     
+    # --- Pharmacy Staff Fields ---
+    is_pharmacy_staff = models.BooleanField(_("pharmacy staff status"), default=False, help_text=_("Designates whether the user can log into the pharmacy portal."),)
+    works_at_pharmacy = models.ForeignKey('pharmacy.Pharmacy', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_members', help_text=_("The pharmacy this staff member belongs to."),)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

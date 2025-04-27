@@ -1,10 +1,14 @@
 from rest_framework import generics, permissions, filters, status, views
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
 from pharmacy.models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
 from pharmacy.serializers import (
-    PharmacySerializer, MedicationSerializer, PharmacyInventorySerializer,
+    PharmacySerializer, PharmacyOrderListSerializer,
+    PharmacyOrderDetailSerializer,PharmacyOrderUpdateSerializer,
+    MedicationSerializer, PharmacyInventorySerializer,
     MedicationOrderSerializer, MedicationReminderSerializer
 )
+from .permissions import IsPharmacyStaffOfOrderPharmacy
 from doctors.models import Prescription, PrescriptionItem
 from django.shortcuts import get_object_or_404
 from django.db import transaction
@@ -76,6 +80,33 @@ class PharmacyListView(generics.ListAPIView):
 
 
         return queryset.order_by('name')
+    
+class PharmacyOrderListView(generics.ListAPIView):
+    """Lists orders for the logged-in pharmacy staff's pharmacy."""
+    serializer_class = PharmacyOrderListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsPharmacyStaffOfOrderPharmacy] # Check base role
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['status', 'is_delivery'] # Allow filtering by status, etc.
+    ordering_fields = ['order_date', 'status']
+    ordering = ['-order_date'] # Default ordering
+
+    def get_queryset(self):
+        """Filter orders for the staff member's assigned pharmacy."""
+        user = self.request.user
+        if hasattr(user, 'works_at_pharmacy') and user.works_at_pharmacy:
+            return MedicationOrder.objects.filter(pharmacy=user.works_at_pharmacy)
+        return MedicationOrder.objects.none() # Return empty if no pharmacy linked
+
+class PharmacyOrderDetailView(generics.RetrieveUpdateAPIView):
+    """Retrieve or Update a specific order for the pharmacy."""
+    queryset = MedicationOrder.objects.all() # Base queryset
+    permission_classes = [permissions.IsAuthenticated, IsPharmacyStaffOfOrderPharmacy] # Check role AND object pharmacy
+
+    def get_serializer_class(self):
+        """Use different serializers for retrieve (GET) vs update (PATCH/PUT)."""
+        if self.request.method in ['PUT', 'PATCH']:
+            return PharmacyOrderUpdateSerializer
+        return PharmacyOrderDetailSerializer
 
 class MedicationListView(generics.ListAPIView):
     queryset = Medication.objects.all()
