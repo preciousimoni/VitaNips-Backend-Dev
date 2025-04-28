@@ -18,6 +18,7 @@ urlpatterns = [
     path('api/health/', include('health.urls')),
     path('api/insurance/', include('insurance.urls')),
     path('api/emergency/', include('emergency.urls')),
+    path('api/notifications/', include('notifications.urls')),
 ]
 
 # Serve media files in development

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'health',
     'insurance',
     'emergency',
+    'notifications'
 ]
 
 MIDDLEWARE = [
