@@ -1,9 +1,65 @@
-from rest_framework import generics, permissions
+from rest_framework import generics, views, permissions, status
+from rest_framework.response import Response
+from .tasks import send_sos_alerts_task
 from .models import EmergencyService, EmergencyContact, EmergencyAlert
 from .serializers import (
     EmergencyServiceSerializer, EmergencyContactSerializer, EmergencyAlertSerializer
 )
 from haversine import haversine, Unit
+
+class TriggerSOSView(views.APIView):
+    """
+    Receives SOS trigger from frontend, queues background task to send alerts.
+    Expects POST data: {'latitude': float, 'longitude': float, 'message': str (optional)}
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        message = request.data.get('message', None) # Optional message
+
+        # Basic Validation
+        if latitude is None or longitude is None:
+            return Response(
+                {"error": "Latitude and Longitude are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            lat_float = float(latitude)
+            lon_float = float(longitude)
+            # Add range checks if needed
+            if not (-90 <= lat_float <= 90 and -180 <= lon_float <= 180):
+                 raise ValueError("Invalid latitude or longitude range.")
+
+        except (ValueError, TypeError):
+             return Response(
+                {"error": "Invalid latitude or longitude format."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Queue the Celery task asynchronously
+        try:
+            send_sos_alerts_task.delay(
+                user_id=request.user.id,
+                latitude=lat_float,
+                longitude=lon_float,
+                message=message
+            )
+            # Return success immediately, task runs in background
+            return Response(
+                {"status": "SOS signal received and processing initiated."},
+                status=status.HTTP_202_ACCEPTED # Accepted for processing
+            )
+        except Exception as e:
+             # Handle errors queuing the task (e.g., Celery broker down)
+             print(f"ERROR queueing SOS task for user {request.user.id}: {e}")
+             # Log the error properly
+             return Response(
+                 {"error": "Could not initiate SOS alert process. Please try again later."},
+                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+             )
 
 class EmergencyServiceListView(generics.ListAPIView):
     serializer_class = EmergencyServiceSerializer

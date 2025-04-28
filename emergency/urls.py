@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     EmergencyServiceListView, EmergencyContactListCreateView, EmergencyContactDetailView,
-    EmergencyAlertListCreateView, EmergencyAlertDetailView
+    EmergencyAlertListCreateView, EmergencyAlertDetailView, TriggerSOSView,
 )
 
 urlpatterns = [
@@ -10,4 +10,5 @@ urlpatterns = [
     path('contacts/<int:pk>/', EmergencyContactDetailView.as_view(), name='emergency-contact-detail'),
     path('alerts/', EmergencyAlertListCreateView.as_view(), name='emergency-alert-list'),
     path('alerts/<int:pk>/', EmergencyAlertDetailView.as_view(), name='emergency-alert-detail'),
+    path('trigger_sos/', TriggerSOSView.as_view(), name='emergency-trigger-sos'),
 ]
