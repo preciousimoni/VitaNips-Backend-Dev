@@ -24,6 +24,11 @@ class User(AbstractUser):
     is_pharmacy_staff = models.BooleanField(_("pharmacy staff status"), default=False, help_text=_("Designates whether the user can log into the pharmacy portal."),)
     works_at_pharmacy = models.ForeignKey('pharmacy.Pharmacy', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_members', help_text=_("The pharmacy this staff member belongs to."),)
     
+    # --- Notification Preferences ---
+    notify_appointment_reminder_email = models.BooleanField(default=True)
+    notify_appointment_reminder_sms = models.BooleanField(default=False)
+    notify_refill_reminder_email = models.BooleanField(default=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

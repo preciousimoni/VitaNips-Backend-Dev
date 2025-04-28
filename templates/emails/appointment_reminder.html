@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><title>{{ subject }}</title></head>
+<body>
+    <p>Hi {{ user.first_name|default:'there' }},</p>
+    <p>This is a reminder for your upcoming appointment:</p>
+    <ul>
+        <li><strong>Doctor:</strong> Dr. {{ appointment.doctor.first_name }} {{ appointment.doctor.last_name }}</li>
+        <li><strong>Date:</strong> {{ appointment.date|date:"l, F j, Y" }}</li>
+        <li><strong>Time:</strong> {{ appointment.start_time|time:"g:i A" }}</li>
+        <li><strong>Type:</strong> {{ appointment.get_appointment_type_display }}</li>
+    </ul>
+    <p>If you need to reschedule or cancel, please visit the VitaNips app.</p>
+    <p>Thanks,<br>The VitaNips Team</p>
+</body>
+</html>

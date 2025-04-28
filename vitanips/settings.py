@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',
     'dj_rest_auth',
+    'django_celery_beat',
     
     # Local apps
     'users',
@@ -179,6 +180,31 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Site ID for django-allauth
 SITE_ID = 1
+
+# --- Celery Configuration ---
+CELERY_BROKER_URL = config('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# --- Email Configuration ---
+# For Development (prints emails to console):
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@vitanips.local') # Your default sender
+
+# For Production (using django-anymail with SendGrid example):
+# ANYMAIL = {
+#     "SENDGRID_API_KEY": config('SENDGRID_API_KEY', default=''),
+#     # "SENDGRID_GENERATE_MESSAGE_ID": True, # Optional
+# }
+# EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend" # Or other backend (e.g., SES)
+# DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='VitaNips <noreply@yourdomain.com>')
+# SERVER_EMAIL = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL) # For error emails
+
+# --- End Celery / Email Config ---
 
 # Logging
 # Ensure log directory exists
