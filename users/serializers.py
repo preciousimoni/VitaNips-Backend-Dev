@@ -12,7 +12,8 @@ class UserSerializer(serializers.ModelSerializer):
             'date_of_birth', 'profile_picture', 'blood_group', 'allergies',
             'chronic_conditions', 'weight', 'height', 'emergency_contact_name',
             'emergency_contact_relationship', 'emergency_contact_phone', 'is_pharmacy_staff', 'works_at_pharmacy',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'notify_appointment_reminder_email',
+            'notify_appointment_reminder_sms', 'notify_refill_reminder_email'
         ]
         read_only_fields = ['created_at', 'updated_at']
         extra_kwargs = {
@@ -49,7 +50,9 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             'first_name', 'last_name', 'phone_number', 'date_of_birth',
             'profile_picture', 'blood_group', 'allergies', 'chronic_conditions',
             'weight', 'height', 'emergency_contact_name',
-            'emergency_contact_relationship', 'emergency_contact_phone', 'is_pharmacy_staff', 'works_at_pharmacy'
+            'emergency_contact_relationship', 'emergency_contact_phone', 'is_pharmacy_staff',
+            'works_at_pharmacy', 'notify_appointment_reminder_email',
+            'notify_appointment_reminder_sms', 'notify_refill_reminder_email'
         ]
         extra_kwargs = {
             'profile_picture': {'required': False},
