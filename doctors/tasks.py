@@ -3,7 +3,8 @@ from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
 from .models import Appointment
-from vitanips.core.utils import send_app_email # Adjust import path
+from notifications.utils import create_notification
+from vitanips.core.utils import send_app_email
 
 @shared_task(name="send_appointment_reminders_task")
 def send_appointment_reminders_task():
@@ -34,7 +35,21 @@ def send_appointment_reminders_task():
 
     for appt in upcoming_appointments:
         user = appt.user
-        # Check user preferences
+        if not user: continue
+        
+        # --- Create In-App Notification ---
+        verb_text = f"Reminder: Your appointment with Dr. {appt.doctor.last_name} is on {appt.date.strftime('%b %d')} at {appt.start_time.strftime('%I:%M %p')}."
+        target_url = f"/appointments/{appt.id}" # Frontend URL
+
+        create_notification(
+            recipient=user,
+            verb=verb_text,
+            level='appointment',
+            target_url=target_url
+        )
+        # --- End In-App Notification ---
+        
+        # Email Notification (Based on Prefs)
         if user and user.email and user.notify_appointment_reminder_email:
             print(f"Attempting to send reminder for appointment {appt.id} to {user.email}")
             context = {

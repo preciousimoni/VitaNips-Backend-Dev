@@ -1,6 +1,7 @@
 from rest_framework import generics, permissions, filters, status, views
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
+from notifications.utils import create_notification
 from pharmacy.models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
 from pharmacy.serializers import (
     PharmacySerializer, PharmacyOrderListSerializer,
@@ -107,6 +108,37 @@ class PharmacyOrderDetailView(generics.RetrieveUpdateAPIView):
         if self.request.method in ['PUT', 'PATCH']:
             return PharmacyOrderUpdateSerializer
         return PharmacyOrderDetailSerializer
+    
+    def perform_update(self, serializer):
+        """Override to trigger notification on status change by pharmacy."""
+        old_instance = self.get_object()
+        new_instance = serializer.save()
+
+        # Notify patient when order is ready for pickup/delivery
+        if old_instance.status != new_instance.status and new_instance.status == 'ready':
+            patient = new_instance.user
+            create_notification(
+                recipient=patient,
+                # Actor could be the pharmacy itself if it had a user account,
+                # or the staff member making the change (request.user)
+                actor=self.request.user,
+                verb=f"Your medication order #{new_instance.id} from {new_instance.pharmacy.name} is ready for {'delivery' if new_instance.is_delivery else 'pickup'}.",
+                level='order',
+                target_url=f"/orders/{new_instance.id}" # Create an order detail page for users
+            )
+            print(f"Order ready notification created for user {patient.id} for order {new_instance.id}")
+
+        # Add notifications for other statuses like 'delivering', 'cancelled', etc.
+        elif old_instance.status != new_instance.status and new_instance.status == 'delivering':
+             patient = new_instance.user
+             create_notification(
+                recipient=patient,
+                actor=self.request.user,
+                verb=f"Your medication order #{new_instance.id} from {new_instance.pharmacy.name} is out for delivery.",
+                level='order',
+                target_url=f"/orders/{new_instance.id}"
+            )
+             print(f"Order delivering notification created for user {patient.id} for order {new_instance.id}")
 
 class MedicationListView(generics.ListAPIView):
     queryset = Medication.objects.all()

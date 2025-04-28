@@ -1,4 +1,7 @@
+# doctors/views.py
 from rest_framework import generics, permissions, filters
+from django.urls import reverse
+from notifications.utils import create_notification
 from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription
 from .serializers import (
     SpecialtySerializer, DoctorSerializer, DoctorReviewSerializer,
@@ -52,10 +55,81 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
 
 class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AppointmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated] # Add IsOwnerOrAssociatedDoctor later
 
     def get_queryset(self):
+        # Users should only see/modify their own appointments
+        # TODO: Allow doctors to see/modify appointments they are part of
         return Appointment.objects.filter(user=self.request.user)
+
+    def perform_update(self, serializer):
+        """Override to trigger notification on status change."""
+        old_instance = self.get_object() # Get the state *before* saving
+        new_instance = serializer.save() # Save the instance with updated data
+
+        # Check if status changed and became 'confirmed'
+        if old_instance.status != new_instance.status and new_instance.status == 'confirmed':
+            patient = new_instance.user
+            doctor = new_instance.doctor
+            # Assuming the update was likely done by the doctor or admin (need proper permission checks later)
+            # Notify the PATIENT
+            create_notification(
+                recipient=patient,
+                actor=doctor.user if hasattr(doctor, 'user') else None, # Link to doctor's user account if exists
+                verb=f"Your appointment with Dr. {doctor.last_name} on {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')} is confirmed.",
+                level='appointment',
+                # Generate a URL to the appointment details page on the frontend
+                # This requires knowing your frontend routing structure
+                target_url=f"/appointments/{new_instance.id}" # Or use reverse() with frontend URL names if set up
+            )
+            print(f"Confirmation notification created for user {patient.id} for appointment {new_instance.id}")
+            
+        # Check if status changed to 'completed'
+        elif old_instance.status != new_instance.status and new_instance.status == 'completed':
+            # --- Trigger prescription creation logic here (if applicable) ---
+            # new_prescription = create_prescription_for_appointment(new_instance)
+            # --- End prescription logic ---
+
+            # If a prescription was created (replace placeholder logic):
+            new_prescription = Prescription.objects.filter(appointment=new_instance).first() # Example lookup
+            if new_prescription:
+                 patient = new_instance.user
+                 create_notification(
+                    recipient=patient,
+                    actor=new_instance.doctor.user if hasattr(new_instance.doctor, 'user') else None,
+                    verb=f"Your prescription from Dr. {new_instance.doctor.last_name} is ready.",
+                    level='prescription',
+                    target_url=f"/prescriptions/{new_prescription.id}" # Link to prescription detail
+                )
+                 print(f"Prescription ready notification created for user {patient.id}")
+
+        # --- Add notification logic for 'cancelled' status change ---
+        elif old_instance.status != new_instance.status and new_instance.status == 'cancelled':
+            patient = new_instance.user
+            doctor = new_instance.doctor
+            # Who cancelled? If request.user is the patient, notify doctor. If doctor, notify patient.
+            # For simplicity now, let's assume we notify the *other* party.
+            other_party = None
+            canceller = self.request.user # Assume the request user initiated the cancel
+            if canceller == patient:
+                other_party = doctor.user if hasattr(doctor, 'user') and doctor.user else None # Notify doctor's user account
+                cancelled_by = f"{patient.first_name} {patient.last_name}".strip() or patient.username
+            elif hasattr(canceller, 'doctor_profile') and canceller.doctor_profile == doctor:
+                other_party = patient # Notify patient
+                cancelled_by = f"Dr. {doctor.last_name}"
+            else: # Cancelled by admin or unknown? Notify both maybe?
+                other_party = patient # Default to notifying patient for now
+
+            if other_party:
+                 create_notification(
+                    recipient=other_party,
+                    actor=canceller,
+                    verb=f"The appointment for {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')} with {'Dr. '+doctor.last_name if other_party == patient else patient.username} was cancelled by {cancelled_by}.",
+                    level='warning', # Or 'info'
+                    target_url=f"/appointments/{new_instance.id}"
+                )
+                 print(f"Cancellation notification created for user {other_party.id} for appointment {new_instance.id}")
+
 
 class PrescriptionListView(generics.ListAPIView):
     serializer_class = PrescriptionSerializer
