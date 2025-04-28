@@ -205,7 +205,12 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@vitanips.loca
 # DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='VitaNips <noreply@yourdomain.com>')
 # SERVER_EMAIL = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL) # For error emails
 
-# --- End Celery / Email Config ---
+# --- Twilio Configuration ---
+TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
+TWILIO_API_KEY_SID = config('TWILIO_API_KEY_SID', default='')
+TWILIO_API_KEY_SECRET = config('TWILIO_API_KEY_SECRET', default='')
+# Optional: Use Auth Token if not using API Key/Secret for token generation
+# TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 
 # Logging
 # Ensure log directory exists

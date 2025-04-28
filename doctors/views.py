@@ -1,6 +1,12 @@
 # doctors/views.py
-from rest_framework import generics, permissions, filters
+import datetime
+from django.conf import settings
+from rest_framework import generics, permissions, filters, views, status
 from django.urls import reverse
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from twilio.jwt.access_token import AccessToken
+from twilio.jwt.access_token.grants import VideoGrant
 from notifications.utils import create_notification
 from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription
 from .serializers import (
@@ -129,6 +135,73 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
                     target_url=f"/appointments/{new_instance.id}"
                 )
                  print(f"Cancellation notification created for user {other_party.id} for appointment {new_instance.id}")
+
+class GetTwilioTokenView(views.APIView):
+    """
+    Generates a Twilio Access Token for a user to join a video call
+    associated with a specific appointment.
+    URL: /api/appointments/{appointment_id}/video_token/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, appointment_id, *args, **kwargs):
+        try:
+            appointment = get_object_or_404(Appointment, pk=appointment_id)
+        except ValueError:
+             return Response({"error": "Invalid Appointment ID format."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+        # --- Permission Check ---
+        # Ensure the requesting user is either the patient or the doctor for this appointment
+        is_patient = (request.user == appointment.user)
+        is_doctor = hasattr(request.user, 'doctor_profile') and (request.user.doctor_profile == appointment.doctor)
+
+        if not (is_patient or is_doctor):
+            return Response(
+                {"error": "You do not have permission to join this video call."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # --- Basic Validation ---
+        # Check if appointment is virtual type and status allows joining
+        if appointment.appointment_type != 'virtual':
+             return Response({"error": "This is not a virtual appointment."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Example: Only allow joining confirmed appointments near the start time
+        # Add more robust time checking logic as needed
+        if appointment.status not in ['confirmed', 'scheduled']: # Adjust allowed statuses
+             return Response({"error": f"Cannot join appointment with status '{appointment.status}'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- Generate Twilio Token ---
+        # Use environment variables directly or from Django settings
+        account_sid = settings.TWILIO_ACCOUNT_SID
+        api_key_sid = settings.TWILIO_API_KEY_SID
+        api_key_secret = settings.TWILIO_API_KEY_SECRET
+
+        if not all([account_sid, api_key_sid, api_key_secret]):
+             print("ERROR: Twilio credentials missing in settings.") # Log this properly
+             return Response({"error": "Video service configuration error."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Unique identity for the user in the Twilio room (e.g., user ID, username)
+        # Must be unique within the room session.
+        identity = f"{'patient' if is_patient else 'doctor'}_{request.user.id}"
+
+        # Unique room name for the appointment (using appointment ID is simple)
+        room_name = f"vitanips_appointment_{appointment.id}"
+
+        # Create access token with credentials
+        access_token = AccessToken(account_sid, api_key_sid, api_key_secret, identity=identity, ttl=3600) # Token valid for 1 hour
+
+        # Create a Video grant and add to token
+        video_grant = VideoGrant(room=room_name)
+        access_token.add_grant(video_grant)
+
+        # Generate the token
+        jwt_token = access_token.to_jwt()
+
+        print(f"Generated Twilio token for user '{identity}' for room '{room_name}'")
+
+        return Response({'token': jwt_token, 'roomName': room_name, 'identity': identity})
 
 
 class PrescriptionListView(generics.ListAPIView):

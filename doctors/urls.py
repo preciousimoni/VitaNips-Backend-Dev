@@ -3,7 +3,8 @@ from .views import (
     SpecialtyListView, DoctorListView, DoctorDetailView,
     DoctorReviewListCreateView, DoctorAvailabilityListView,
     AppointmentListCreateView, AppointmentDetailView,
-    PrescriptionListView, PrescriptionDetailView
+    PrescriptionListView, PrescriptionDetailView,
+    GetTwilioTokenView
 )
 
 urlpatterns = [
@@ -14,6 +15,7 @@ urlpatterns = [
     path('<int:doctor_id>/availability/', DoctorAvailabilityListView.as_view(), name='doctor-availability'),
     path('appointments/', AppointmentListCreateView.as_view(), name='appointment-list'),
     path('appointments/<int:pk>/', AppointmentDetailView.as_view(), name='appointment-detail'),
+    path('appointments/<int:appointment_id>/video_token/', GetTwilioTokenView.as_view(), name='appointment-video-token'),
     path('prescriptions/', PrescriptionListView.as_view(), name='prescription-list'),
     path('prescriptions/<int:pk>/', PrescriptionDetailView.as_view(), name='prescription-detail'),
 ]
