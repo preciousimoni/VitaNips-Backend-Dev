@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from twilio.rest import Client # Import Twilio client
 from twilio.base.exceptions import TwilioRestException # Import Twilio exceptions
 from .models import EmergencyContact, EmergencyAlert, EmergencyAlertContact
+from typing import Optional
 
 User = get_user_model()
 
