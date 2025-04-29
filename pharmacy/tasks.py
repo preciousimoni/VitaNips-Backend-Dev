@@ -1,22 +1,17 @@
 # pharmacy/tasks.py
 from celery import shared_task
 from django.utils import timezone
-from .models import MedicationReminder # Assuming this model exists
-from vitanips.core.utils import send_app_email # Adjust import path
+from .models import MedicationReminder
+from vitanips.core.utils import send_app_email
 
 @shared_task(name="send_medication_reminders_task")
 def send_medication_reminders_task():
-    """Sends reminders for medication doses due."""
     now = timezone.now()
-    # Query MedicationReminder model based on time_of_day, frequency, start/end dates
-    # This logic depends HEAVILY on how MedicationReminder is designed.
-    # Example (very basic - needs refinement):
     reminders_due = MedicationReminder.objects.filter(
         is_active=True,
         start_date__lte=now.date(),
-        # Add end_date check: Q(end_date__isnull=True) | Q(end_date__gte=now.date())
         time_of_day__hour=now.hour, # Check hour
-        time_of_day__minute=now.minute # Check minute (run task frequently)
+        time_of_day__minute=now.minute
         # Add frequency logic (daily, weekly, etc.) - Complex!
     ).select_related('user', 'medication')
 
@@ -24,8 +19,7 @@ def send_medication_reminders_task():
 
     for reminder in reminders_due:
          user = reminder.user
-         # Check user preferences
-         if user and user.email and user.notify_refill_reminder_email: # Use correct pref field
+         if user and user.email and user.notify_refill_reminder_email:
              print(f"Attempting to send reminder for medication {reminder.medication.name} to {user.email}")
              context = {
                  'user': user,
@@ -36,7 +30,7 @@ def send_medication_reminders_task():
              send_app_email(
                  to_email=user.email,
                  subject=context['subject'],
-                 template_name='emails/medication_reminder.html', # Create this template
+                 template_name='emails/medication_reminder.html',
                  context=context
              )
          # --- TODO: Add logic for SMS/Push notifications here ---

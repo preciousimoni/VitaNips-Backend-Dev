@@ -4,11 +4,10 @@ from rest_framework.response import Response
 from django.utils import timezone
 from .models import Notification
 from .serializers import NotificationSerializer
-from rest_framework.pagination import PageNumberPagination # Import pagination
+from rest_framework.pagination import PageNumberPagination
 
-# Optional: Define a standard pagination class for notifications
 class NotificationPagination(PageNumberPagination):
-    page_size = 15 # Number of notifications per page
+    page_size = 15
     page_size_query_param = 'page_size'
     max_page_size = 50
 
@@ -16,7 +15,7 @@ class NotificationListView(generics.ListAPIView):
     """Lists notifications for the logged-in user. Supports filtering by 'unread'."""
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = NotificationPagination # Apply pagination
+    pagination_class = NotificationPagination
 
     def get_queryset(self):
         queryset = Notification.objects.filter(recipient=self.request.user)
@@ -24,7 +23,7 @@ class NotificationListView(generics.ListAPIView):
         if unread_filter is not None:
             is_unread = unread_filter.lower() in ['true', '1', 'yes']
             queryset = queryset.filter(unread=is_unread)
-        return queryset # Default ordering is '-timestamp' from model Meta
+        return queryset
 
 class MarkNotificationAsReadView(views.APIView):
     """Marks a specific notification as read."""
@@ -34,13 +33,11 @@ class MarkNotificationAsReadView(views.APIView):
         try:
             notification = Notification.objects.get(pk=pk, recipient=request.user)
             notification.mark_as_read()
-            # Return the updated notification object
             serializer = NotificationSerializer(notification)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Notification.DoesNotExist:
             return Response({"detail": "Not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-             # Log error e
              return Response({"detail": "An error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

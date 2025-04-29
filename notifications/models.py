@@ -2,8 +2,6 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-# from django.contrib.contenttypes.fields import GenericForeignKey # Optional for linking target
-# from django.contrib.contenttypes.models import ContentType       # Optional for linking target
 
 class Notification(models.Model):
     LEVEL_CHOICES = [
@@ -11,13 +9,11 @@ class Notification(models.Model):
         ('success', 'Success'),
         ('warning', 'Warning'),
         ('error', 'Error'),
-        ('appointment', 'Appointment'), # Example specific type
-        ('prescription', 'Prescription'), # Example specific type
-        ('order', 'Order'),           # Example specific type
-        # Add more context-specific levels as needed
+        ('appointment', 'Appointment'),
+        ('prescription', 'Prescription'),
+        ('order', 'Order'),
     ]
 
-    # Core Fields
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -32,21 +28,15 @@ class Notification(models.Model):
     timestamp = models.DateTimeField(default=timezone.now, db_index=True)
     level = models.CharField(max_length=20, choices=LEVEL_CHOICES, default='info')
 
-    # Optional Fields for Context
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL, # Actor might be deleted
-        related_name='triggered_notifications', # Avoid clash with recipient relation
+        on_delete=models.SET_NULL,
+        related_name='triggered_notifications',
         null=True,
         blank=True,
         help_text="The user who initiated the action leading to the notification (optional)."
     )
-    # Optional: Link to a specific object using GenericForeignKey (more flexible)
-    # target_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
-    # target_object_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
-    # target = GenericForeignKey('target_content_type', 'target_object_id')
 
-    # Simpler Option: Store a URL to redirect to
     target_url = models.URLField(
         max_length=500,
         null=True,
@@ -57,7 +47,7 @@ class Notification(models.Model):
     class Meta:
         ordering = ['-timestamp']
         indexes = [
-            models.Index(fields=['recipient', 'unread']), # Index for efficient filtering
+            models.Index(fields=['recipient', 'unread']),
         ]
 
     def __str__(self):

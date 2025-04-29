@@ -1,3 +1,4 @@
+# insurance/views.py
 from rest_framework import generics, permissions
 from .models import InsuranceProvider, InsurancePlan, UserInsurance, InsuranceClaim, InsuranceDocument
 from .serializers import (

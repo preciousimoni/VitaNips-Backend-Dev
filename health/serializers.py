@@ -1,3 +1,4 @@
+# health/serializers.py
 from rest_framework import serializers
 from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
 from users.serializers import UserSerializer
@@ -61,7 +62,6 @@ class HealthGoalSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'created_at', 'updated_at']
         
 class MedicalDocumentSerializer(serializers.ModelSerializer):
-    # uploaded_by_email = serializers.ReadOnlyField(source='uploaded_by.email')
     file_url = serializers.SerializerMethodField()
     filename = serializers.SerializerMethodField()
 
@@ -72,8 +72,8 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
             'filename', 'description', 'document_type', 'uploaded_at',
         ]
         read_only_fields = [
-            'user', # Set automatically in the view
-            'uploaded_by', # Set automatically in the view
+            'user',
+            'uploaded_by',
             'uploaded_at',
             'file_url',
             'filename',

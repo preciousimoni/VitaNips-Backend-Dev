@@ -8,17 +8,15 @@ from vitanips.core.utils import send_app_email
 
 @shared_task(name="send_appointment_reminders_task")
 def send_appointment_reminders_task():
-    """Sends reminders for appointments coming up soon."""
     now = timezone.now()
-    # Example: Remind 24-25 hours before & 1-2 hours before
     reminder_threshold_24h_start = now + timedelta(hours=24)
     reminder_threshold_24h_end = now + timedelta(hours=25)
     reminder_threshold_1h_start = now + timedelta(hours=1)
     reminder_threshold_1h_end = now + timedelta(hours=2)
 
     upcoming_appointments = Appointment.objects.filter(
-        status__in=['scheduled', 'confirmed'], # Only remind for active appointments
-        date=reminder_threshold_24h_start.date(), # Filter by date first for efficiency
+        status__in=['scheduled', 'confirmed'],
+        date=reminder_threshold_24h_start.date(),
         start_time__gte=reminder_threshold_24h_start.time(),
         start_time__lt=reminder_threshold_24h_end.time()
     ) | Appointment.objects.filter(
@@ -28,7 +26,6 @@ def send_appointment_reminders_task():
         start_time__lt=reminder_threshold_1h_end.time()
     )
 
-    # Ensure distinct appointments and prefetch related user/doctor data
     upcoming_appointments = upcoming_appointments.distinct().select_related('user', 'doctor')
 
     print(f"Found {upcoming_appointments.count()} appointments for reminder checks.")
@@ -37,9 +34,8 @@ def send_appointment_reminders_task():
         user = appt.user
         if not user: continue
         
-        # --- Create In-App Notification ---
         verb_text = f"Reminder: Your appointment with Dr. {appt.doctor.last_name} is on {appt.date.strftime('%b %d')} at {appt.start_time.strftime('%I:%M %p')}."
-        target_url = f"/appointments/{appt.id}" # Frontend URL
+        target_url = f"/appointments/{appt.id}"
 
         create_notification(
             recipient=user,
@@ -47,9 +43,7 @@ def send_appointment_reminders_task():
             level='appointment',
             target_url=target_url
         )
-        # --- End In-App Notification ---
         
-        # Email Notification (Based on Prefs)
         if user and user.email and user.notify_appointment_reminder_email:
             print(f"Attempting to send reminder for appointment {appt.id} to {user.email}")
             context = {

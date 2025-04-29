@@ -1,3 +1,4 @@
+# emergency/views.py
 from rest_framework import generics, views, permissions, status
 from rest_framework.response import Response
 from .tasks import send_sos_alerts_task
@@ -17,9 +18,8 @@ class TriggerSOSView(views.APIView):
     def post(self, request, *args, **kwargs):
         latitude = request.data.get('latitude')
         longitude = request.data.get('longitude')
-        message = request.data.get('message', None) # Optional message
+        message = request.data.get('message', None)
 
-        # Basic Validation
         if latitude is None or longitude is None:
             return Response(
                 {"error": "Latitude and Longitude are required."},
@@ -29,7 +29,6 @@ class TriggerSOSView(views.APIView):
         try:
             lat_float = float(latitude)
             lon_float = float(longitude)
-            # Add range checks if needed
             if not (-90 <= lat_float <= 90 and -180 <= lon_float <= 180):
                  raise ValueError("Invalid latitude or longitude range.")
 
@@ -39,7 +38,6 @@ class TriggerSOSView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Queue the Celery task asynchronously
         try:
             send_sos_alerts_task.delay(
                 user_id=request.user.id,
@@ -47,15 +45,12 @@ class TriggerSOSView(views.APIView):
                 longitude=lon_float,
                 message=message
             )
-            # Return success immediately, task runs in background
             return Response(
                 {"status": "SOS signal received and processing initiated."},
-                status=status.HTTP_202_ACCEPTED # Accepted for processing
+                status=status.HTTP_202_ACCEPTED
             )
         except Exception as e:
-             # Handle errors queuing the task (e.g., Celery broker down)
              print(f"ERROR queueing SOS task for user {request.user.id}: {e}")
-             # Log the error properly
              return Response(
                  {"error": "Could not initiate SOS alert process. Please try again later."},
                  status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -87,13 +82,11 @@ class EmergencyServiceListView(generics.ListAPIView):
                 queryset = queryset.filter(id__in=service_ids_in_radius)
 
                 # --- Option B: GeoDjango Filtering (Requires PostGIS setup) ---
-                # See comments in PharmacyListView for GeoDjango example
 
             except (ValueError, TypeError) as e:
-                print(f"Error processing location parameters: {e}") # Log the error
-                pass # Ignoring invalid params
+                print(f"Error processing location parameters: {e}")
+                pass
 
-        # Add other filters (e.g., by service_type)
         service_type = self.request.query_params.get('service_type')
         if service_type:
             queryset = queryset.filter(service_type=service_type)

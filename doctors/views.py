@@ -70,34 +70,25 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_update(self, serializer):
         """Override to trigger notification on status change."""
-        old_instance = self.get_object() # Get the state *before* saving
-        new_instance = serializer.save() # Save the instance with updated data
+        old_instance = self.get_object()
+        new_instance = serializer.save()
 
-        # Check if status changed and became 'confirmed'
         if old_instance.status != new_instance.status and new_instance.status == 'confirmed':
             patient = new_instance.user
             doctor = new_instance.doctor
             # Assuming the update was likely done by the doctor or admin (need proper permission checks later)
-            # Notify the PATIENT
             create_notification(
                 recipient=patient,
-                actor=doctor.user if hasattr(doctor, 'user') else None, # Link to doctor's user account if exists
+                actor=doctor.user if hasattr(doctor, 'user') else None,
                 verb=f"Your appointment with Dr. {doctor.last_name} on {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')} is confirmed.",
                 level='appointment',
-                # Generate a URL to the appointment details page on the frontend
-                # This requires knowing your frontend routing structure
-                target_url=f"/appointments/{new_instance.id}" # Or use reverse() with frontend URL names if set up
+                target_url=f"/appointments/{new_instance.id}"
             )
             print(f"Confirmation notification created for user {patient.id} for appointment {new_instance.id}")
             
-        # Check if status changed to 'completed'
         elif old_instance.status != new_instance.status and new_instance.status == 'completed':
-            # --- Trigger prescription creation logic here (if applicable) ---
-            # new_prescription = create_prescription_for_appointment(new_instance)
-            # --- End prescription logic ---
 
-            # If a prescription was created (replace placeholder logic):
-            new_prescription = Prescription.objects.filter(appointment=new_instance).first() # Example lookup
+            new_prescription = Prescription.objects.filter(appointment=new_instance).first()
             if new_prescription:
                  patient = new_instance.user
                  create_notification(
@@ -105,26 +96,23 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
                     actor=new_instance.doctor.user if hasattr(new_instance.doctor, 'user') else None,
                     verb=f"Your prescription from Dr. {new_instance.doctor.last_name} is ready.",
                     level='prescription',
-                    target_url=f"/prescriptions/{new_prescription.id}" # Link to prescription detail
+                    target_url=f"/prescriptions/{new_prescription.id}"
                 )
                  print(f"Prescription ready notification created for user {patient.id}")
 
-        # --- Add notification logic for 'cancelled' status change ---
         elif old_instance.status != new_instance.status and new_instance.status == 'cancelled':
             patient = new_instance.user
             doctor = new_instance.doctor
-            # Who cancelled? If request.user is the patient, notify doctor. If doctor, notify patient.
-            # For simplicity now, let's assume we notify the *other* party.
             other_party = None
-            canceller = self.request.user # Assume the request user initiated the cancel
+            canceller = self.request.user
             if canceller == patient:
-                other_party = doctor.user if hasattr(doctor, 'user') and doctor.user else None # Notify doctor's user account
+                other_party = doctor.user if hasattr(doctor, 'user') and doctor.user else None 
                 cancelled_by = f"{patient.first_name} {patient.last_name}".strip() or patient.username
             elif hasattr(canceller, 'doctor_profile') and canceller.doctor_profile == doctor:
-                other_party = patient # Notify patient
+                other_party = patient
                 cancelled_by = f"Dr. {doctor.last_name}"
-            else: # Cancelled by admin or unknown? Notify both maybe?
-                other_party = patient # Default to notifying patient for now
+            else:
+                other_party = patient
 
             if other_party:
                  create_notification(
@@ -137,11 +125,6 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
                  print(f"Cancellation notification created for user {other_party.id} for appointment {new_instance.id}")
 
 class GetTwilioTokenView(views.APIView):
-    """
-    Generates a Twilio Access Token for a user to join a video call
-    associated with a specific appointment.
-    URL: /api/appointments/{appointment_id}/video_token/
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, appointment_id, *args, **kwargs):
@@ -150,9 +133,6 @@ class GetTwilioTokenView(views.APIView):
         except ValueError:
              return Response({"error": "Invalid Appointment ID format."}, status=status.HTTP_400_BAD_REQUEST)
 
-
-        # --- Permission Check ---
-        # Ensure the requesting user is either the patient or the doctor for this appointment
         is_patient = (request.user == appointment.user)
         is_doctor = hasattr(request.user, 'doctor_profile') and (request.user.doctor_profile == appointment.doctor)
 
@@ -162,41 +142,29 @@ class GetTwilioTokenView(views.APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # --- Basic Validation ---
-        # Check if appointment is virtual type and status allows joining
         if appointment.appointment_type != 'virtual':
              return Response({"error": "This is not a virtual appointment."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Example: Only allow joining confirmed appointments near the start time
-        # Add more robust time checking logic as needed
-        if appointment.status not in ['confirmed', 'scheduled']: # Adjust allowed statuses
+        if appointment.status not in ['confirmed', 'scheduled']:
              return Response({"error": f"Cannot join appointment with status '{appointment.status}'."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # --- Generate Twilio Token ---
-        # Use environment variables directly or from Django settings
         account_sid = settings.TWILIO_ACCOUNT_SID
         api_key_sid = settings.TWILIO_API_KEY_SID
         api_key_secret = settings.TWILIO_API_KEY_SECRET
 
         if not all([account_sid, api_key_sid, api_key_secret]):
-             print("ERROR: Twilio credentials missing in settings.") # Log this properly
+             print("ERROR: Twilio credentials missing in settings.")
              return Response({"error": "Video service configuration error."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Unique identity for the user in the Twilio room (e.g., user ID, username)
-        # Must be unique within the room session.
         identity = f"{'patient' if is_patient else 'doctor'}_{request.user.id}"
 
-        # Unique room name for the appointment (using appointment ID is simple)
         room_name = f"vitanips_appointment_{appointment.id}"
 
-        # Create access token with credentials
-        access_token = AccessToken(account_sid, api_key_sid, api_key_secret, identity=identity, ttl=3600) # Token valid for 1 hour
+        access_token = AccessToken(account_sid, api_key_sid, api_key_secret, identity=identity, ttl=3600)
 
-        # Create a Video grant and add to token
         video_grant = VideoGrant(room=room_name)
         access_token.add_grant(video_grant)
 
-        # Generate the token
         jwt_token = access_token.to_jwt()
 
         print(f"Generated Twilio token for user '{identity}' for room '{room_name}'")

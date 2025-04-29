@@ -1,3 +1,4 @@
+# doctors/serializers.py
 from rest_framework import serializers
 from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem
 

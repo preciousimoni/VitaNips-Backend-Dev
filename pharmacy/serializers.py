@@ -2,8 +2,13 @@ from rest_framework import serializers
 from .models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
 from users.serializers import UserSerializer
 from doctors.serializers import PrescriptionItemSerializer
+from django.contrib.gis.geos import Point
 
 class PharmacySerializer(serializers.ModelSerializer):
+    # Define latitude and longitude as serializer fields (not model fields)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
+
     class Meta:
         model = Pharmacy
         fields = [
@@ -11,42 +16,84 @@ class PharmacySerializer(serializers.ModelSerializer):
             'longitude', 'operating_hours', 'is_24_hours', 'offers_delivery',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
-        
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def to_representation(self, instance):
+        """
+        Convert the PointField (location) to separate latitude and longitude fields in the response.
+        """
+        representation = super().to_representation(instance)
+        if instance.location:
+            # Extract latitude (y) and longitude (x) from Point
+            representation['latitude'] = instance.location.y
+            representation['longitude'] = instance.location.x
+        else:
+            representation['latitude'] = None
+            representation['longitude'] = None
+        return representation
+
+    def validate(self, data):
+        """
+        Ensure that both latitude and longitude are provided together if one is present.
+        """
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        if (latitude is not None and longitude is None) or (longitude is not None and latitude is None):
+            raise serializers.ValidationError(
+                "Both latitude and longitude must be provided together."
+            )
+        return data
+
+    def create(self, validated_data):
+        """
+        Convert latitude and longitude to a PointField for the location.
+        """
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+        if latitude is not None and longitude is not None:
+            validated_data['location'] = Point(longitude, latitude, srid=4326)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        """
+        Update the location PointField if latitude and longitude are provided.
+        """
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+        if latitude is not None and longitude is not None:
+            validated_data['location'] = Point(longitude, latitude, srid=4326)
+        elif latitude is None and longitude is None:
+            # Preserve existing location if neither is provided
+            validated_data['location'] = instance.location
+        return super().update(instance, validated_data)
+
 class PharmacyOrderItemViewSerializer(serializers.ModelSerializer):
-    # prescription_item = PrescriptionItemSerializer(read_only=True) # Optionally show original details
     class Meta:
         model = MedicationOrderItem
         fields = [
             'id', 'medication_name_text', 'dosage_text', 'quantity',
             'price_per_unit', 'total_price'
-            # Add frequency, duration, instructions if needed
         ]
-        read_only_fields = fields # Read-only view for pharmacy initially
+        read_only_fields = fields
 
-# Serializer for listing orders for the pharmacy dashboard
 class PharmacyOrderListSerializer(serializers.ModelSerializer):
-    # Show minimal patient info (consider privacy)
     patient_name = serializers.SerializerMethodField()
 
     class Meta:
         model = MedicationOrder
         fields = [
             'id', 'patient_name', 'status', 'order_date', 'is_delivery',
-            'pickup_or_delivery_date', 'prescription' # Prescription ID for reference
+            'pickup_or_delivery_date', 'prescription'
         ]
 
     def get_patient_name(self, obj):
-        # Example: Concatenate first/last name. Check if user object exists.
         if obj.user:
             return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
         return "N/A"
 
-# Serializer for viewing/updating a specific order by pharmacy
 class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
-    items = PharmacyOrderItemViewSerializer(many=True, read_only=True) # Use the read-only item view
-    user = UserSerializer(read_only=True) # Show patient details (adjust fields in UserSerializer if needed)
-    # Optionally add more details about the prescription or doctor
+    items = PharmacyOrderItemViewSerializer(many=True, read_only=True)
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = MedicationOrder
@@ -55,36 +102,28 @@ class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
             'delivery_address', 'total_amount', 'order_date', 'pickup_or_delivery_date',
             'notes', 'items'
         ]
-        # Fields pharmacy can potentially UPDATE: status, notes, pickup_or_delivery_date
-        # Price/Total Amount update might need a separate mechanism or serializer
+        
         read_only_fields = [
             'id', 'user', 'pharmacy', 'prescription', 'order_date', 'items',
-            'is_delivery', 'delivery_address', 'total_amount' # Initially read-only
-            ]
+            'is_delivery', 'delivery_address', 'total_amount'
+        ]
 
-# Serializer specifically for pharmacy updating an order (e.g., status, notes)
 class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
-     # Example: Define allowed status transitions
-     ALLOWED_STATUS_TRANSITIONS = {
-         'pending': ['processing', 'cancelled'],
-         'processing': ['ready', 'cancelled'],
-         'ready': ['delivering', 'completed', 'cancelled'], # If delivery offered
-         'delivering': ['completed', 'cancelled'],
-         # Cannot transition from completed or cancelled easily
-     }
+    ALLOWED_STATUS_TRANSITIONS = {
+        'pending': ['processing', 'cancelled'],
+        'processing': ['ready', 'cancelled'],
+        'ready': ['delivering', 'completed', 'cancelled'],
+        'delivering': ['completed', 'cancelled'],
+    }
 
-     class Meta:
+    class Meta:
         model = MedicationOrder
         fields = [
-            'status', 'notes', 'pickup_or_delivery_date',
-            # Possibly add total_amount here if pharmacy sets it directly
-            # 'total_amount'
+            'status', 'notes', 'pickup_or_delivery_date', 'total_amount'
         ]
-        # Price per item might need separate handling via item endpoint or nested writable serializer
 
-     def validate_status(self, value):
-        """Check for valid status transitions."""
-        if self.instance: # Check only during updates
+    def validate_status(self, value):
+        if self.instance:
             current_status = self.instance.status
             allowed_next = self.ALLOWED_STATUS_TRANSITIONS.get(current_status, [])
             if value not in allowed_next:
@@ -123,9 +162,8 @@ class MedicationOrderItemSerializer(serializers.ModelSerializer):
 
 class MedicationOrderSerializer(serializers.ModelSerializer):
     items = MedicationOrderItemSerializer(many=True, read_only=True)
-    # Optionally add nested Pharmacy/User details if needed for display
-    # pharmacy = PharmacySerializer(read_only=True)
-    # user = UserSerializer(read_only=True) # Assuming UserSerializer is available
+    pharmacy = PharmacySerializer(read_only=True)
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = MedicationOrder

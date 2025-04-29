@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.contrib.gis.db import models as gis_models  # Import GeoDjango models
 from doctors.models import Prescription, PrescriptionItem
 
 class Pharmacy(models.Model):
@@ -7,8 +8,7 @@ class Pharmacy(models.Model):
     address = models.TextField()
     phone_number = models.CharField(max_length=15)
     email = models.EmailField(blank=True, null=True)
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
+    location = gis_models.PointField(null=True, blank=True, srid=4326)
     operating_hours = models.TextField()
     is_24_hours = models.BooleanField(default=False)
     offers_delivery = models.BooleanField(default=False)
@@ -80,7 +80,6 @@ class MedicationOrder(models.Model):
 class MedicationOrderItem(models.Model):
     order = models.ForeignKey(MedicationOrder, on_delete=models.CASCADE, related_name='items')
     prescription_item = models.ForeignKey(PrescriptionItem, on_delete=models.SET_NULL, null=True, blank=True)
-    # medication = models.ForeignKey(Medication, on_delete=models.SET_NULL, null=True, blank=True)
     medication_name_text = models.CharField(max_length=200, null=True, blank=True, help_text="Medication name as written on prescription")
     dosage_text = models.CharField(max_length=100, null=True, blank=True, help_text="Dosage as written on prescription")
     quantity = models.PositiveIntegerField(default=1)
@@ -110,7 +109,7 @@ class MedicationReminder(models.Model):
     end_date = models.DateField(null=True, blank=True)
     time_of_day = models.TimeField()
     frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
-    custom_frequency = models.CharField(max_length=100, blank=True, null=True)  # For 'custom' frequency
+    custom_frequency = models.CharField(max_length=100, blank=True, null=True)
     dosage = models.CharField(max_length=100)
     notes = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)

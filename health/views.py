@@ -1,3 +1,4 @@
+# health/views.py
 from rest_framework import generics, permissions
 from notifications.utils import create_notification
 from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
@@ -12,26 +13,23 @@ class MedicalDocumentListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # ... lists docs for request.user ...
         return MedicalDocument.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         """Set user/uploaded_by and notify doctor if linked to appointment."""
-        # Assuming uploaded_by should always be the request user here
         document = serializer.save(user=self.request.user, uploaded_by=self.request.user)
 
-        # Check if the document is linked to an appointment
         if document.appointment and document.appointment.doctor:
             doctor_user = document.appointment.doctor.user if hasattr(document.appointment.doctor, 'user') else None
             patient = self.request.user
 
-            if doctor_user: # Only notify if the doctor has a user account
+            if doctor_user:
                 create_notification(
                     recipient=doctor_user,
                     actor=patient,
                     verb=f"Patient {patient.first_name} {patient.last_name} uploaded a document ('{document.filename or 'document'}') for appointment on {document.appointment.date.strftime('%b %d')}.",
-                    level='info', # Or a specific 'document' level
-                    target_url=f"/portal/appointments/{document.appointment.id}/documents/" # Example doctor portal URL
+                    level='info',
+                    target_url=f"/portal/appointments/{document.appointment.id}/documents/"
                 )
                 print(f"Document upload notification created for doctor {doctor_user.id} for document {document.id}")
 
