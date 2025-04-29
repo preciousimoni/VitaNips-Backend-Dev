@@ -13,7 +13,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # SECURITY WARNING: keep the secret key used in production secret!
-
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')])
@@ -28,6 +27,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.gis',  # Added for GeoDjango support
     
     # Third-party apps
     'rest_framework',
@@ -87,8 +87,12 @@ DJANGO_ENV = config('DJANGO_ENV', default='development')
 if DJANGO_ENV == 'development':
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'ENGINE': 'django.contrib.gis.db.backends.postgis',  # Use PostGIS for development
+            'NAME': config('DEV_DB_NAME', default='vitanips_dev'),
+            'USER': config('DEV_DB_USER', default='postgres'),
+            'PASSWORD': config('DEV_DB_PASSWORD', default=''),
+            'HOST': config('DEV_DB_HOST', default='localhost'),
+            'PORT': config('DEV_DB_PORT', default='5432'),
         }
     }
 else:
@@ -97,6 +101,7 @@ else:
             config('DATABASE_URL'),
             conn_max_age=600,
             conn_health_checks=True,
+            engine='django.contrib.gis.db.backends.postgis',  # Ensure PostGIS engine
         )
     }
 
@@ -187,7 +192,7 @@ SITE_ID = 1
 CELERY_BROKER_URL = config('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND')
 CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
+CELERY_TASK_SERIALICER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
