@@ -6,7 +6,8 @@ from .models import EmergencyService, EmergencyContact, EmergencyAlert
 from .serializers import (
     EmergencyServiceSerializer, EmergencyContactSerializer, EmergencyAlertSerializer
 )
-from haversine import haversine, Unit
+from django.contrib.gis.geos import Point
+from django.contrib.gis.measure import D
 
 class TriggerSOSView(views.APIView):
     """
@@ -30,10 +31,9 @@ class TriggerSOSView(views.APIView):
             lat_float = float(latitude)
             lon_float = float(longitude)
             if not (-90 <= lat_float <= 90 and -180 <= lon_float <= 180):
-                 raise ValueError("Invalid latitude or longitude range.")
-
+                raise ValueError("Invalid latitude or longitude range.")
         except (ValueError, TypeError):
-             return Response(
+            return Response(
                 {"error": "Invalid latitude or longitude format."},
                 status=status.HTTP_400_BAD_REQUEST
             )
@@ -50,11 +50,11 @@ class TriggerSOSView(views.APIView):
                 status=status.HTTP_202_ACCEPTED
             )
         except Exception as e:
-             print(f"ERROR queueing SOS task for user {request.user.id}: {e}")
-             return Response(
-                 {"error": "Could not initiate SOS alert process. Please try again later."},
-                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-             )
+            print(f"ERROR queueing SOS task for user {request.user.id}: {e}")
+            return Response(
+                {"error": "Could not initiate SOS alert process. Please try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class EmergencyServiceListView(generics.ListAPIView):
     serializer_class = EmergencyServiceSerializer
@@ -69,20 +69,11 @@ class EmergencyServiceListView(generics.ListAPIView):
 
         if latitude and longitude:
             try:
-                user_location = (float(latitude), float(longitude))
+                user_location = Point(float(longitude), float(latitude), srid=4326)
                 radius_km = float(radius_km)
-
-                # --- Option A: Simple Haversine Filtering ---
-                service_ids_in_radius = []
-                for service in queryset.filter(latitude__isnull=False, longitude__isnull=False):
-                    service_location = (service.latitude, service.longitude)
-                    distance = haversine(user_location, service_location, unit=Unit.KILOMETERS)
-                    if distance <= radius_km:
-                        service_ids_in_radius.append(service.id)
-                queryset = queryset.filter(id__in=service_ids_in_radius)
-
-                # --- Option B: GeoDjango Filtering (Requires PostGIS setup) ---
-
+                queryset = queryset.filter(
+                    location__distance_lte=(user_location, D(km=radius_km))
+                )
             except (ValueError, TypeError) as e:
                 print(f"Error processing location parameters: {e}")
                 pass

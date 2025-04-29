@@ -1,8 +1,12 @@
 # emergency/serializers.py
 from rest_framework import serializers
 from .models import EmergencyService, EmergencyContact, EmergencyAlert, EmergencyAlertContact
+from django.contrib.gis.geos import Point
 
 class EmergencyServiceSerializer(serializers.ModelSerializer):
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
+
     class Meta:
         model = EmergencyService
         fields = [
@@ -11,6 +15,41 @@ class EmergencyServiceSerializer(serializers.ModelSerializer):
             'has_emergency_room', 'provides_ambulance', 'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.location:
+            representation['latitude'] = instance.location.y
+            representation['longitude'] = instance.location.x
+        else:
+            representation['latitude'] = None
+            representation['longitude'] = None
+        return representation
+
+    def validate(self, data):
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        if (latitude is not None and longitude is None) or (longitude is not None and latitude is None):
+            raise serializers.ValidationError(
+                "Both latitude and longitude must be provided together."
+            )
+        return data
+
+    def create(self, validated_data):
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+        if latitude is not None and longitude is not None:
+            validated_data['location'] = Point(longitude, latitude, srid=4326)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+        if latitude is not None and longitude is not None:
+            validated_data['location'] = Point(longitude, latitude, srid=4326)
+        elif latitude is None and longitude is None:
+            validated_data['location'] = instance.location
+        return super().update(instance, validated_data)
 
 class EmergencyContactSerializer(serializers.ModelSerializer):
     class Meta:
@@ -34,6 +73,8 @@ class EmergencyAlertContactSerializer(serializers.ModelSerializer):
 
 class EmergencyAlertSerializer(serializers.ModelSerializer):
     contacted_persons = EmergencyAlertContactSerializer(many=True, read_only=True)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
         model = EmergencyAlert
@@ -41,4 +82,39 @@ class EmergencyAlertSerializer(serializers.ModelSerializer):
             'id', 'user', 'initiated_at', 'latitude', 'longitude', 'message',
             'status', 'resolved_at', 'resolution_notes', 'contacted_persons'
         ]
-        read_only_fields = ['user', 'initiated_at']
+        read_only_fields = ['user', 'initiated_at', 'contacted_persons']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.location:
+            representation['latitude'] = instance.location.y
+            representation['longitude'] = instance.location.x
+        else:
+            representation['latitude'] = None
+            representation['longitude'] = None
+        return representation
+
+    def validate(self, data):
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        if (latitude is not None and longitude is None) or (longitude is not None and latitude is None):
+            raise serializers.ValidationError(
+                "Both latitude and longitude must be provided together."
+            )
+        return data
+
+    def create(self, validated_data):
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+        if latitude is not None and longitude is not None:
+            validated_data['location'] = Point(longitude, latitude, srid=4326)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        latitude = validated_data.pop('latitude', None)
+        longitude = validated_data.pop('longitude', None)
+        if latitude is not None and longitude is not None:
+            validated_data['location'] = Point(longitude, latitude, srid=4326)
+        elif latitude is None and longitude is None:
+            validated_data['location'] = instance.location
+        return super().update(instance, validated_data)

@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from .models import EmergencyContact, EmergencyAlert, EmergencyAlertContact
+from django.contrib.gis.geos import Point
 from typing import Optional
 
 User = get_user_model()
@@ -20,7 +21,6 @@ if TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
 else:
     print("WARNING: Twilio credentials not found in environment variables. SOS SMS sending will be disabled.")
 
-
 @shared_task(name="send_sos_alerts_task")
 def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, message: Optional[str] = None):
     try:
@@ -33,15 +33,17 @@ def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, messag
     if not contacts.exists():
         print(f"User {user_id} ({user.username}) triggered SOS but has no emergency contacts.")
         EmergencyAlert.objects.create(
-             user=user, latitude=latitude, longitude=longitude, message=message or "SOS Triggered",
-             status='resolved', resolution_notes="No emergency contacts configured."
-         )
+            user=user,
+            location=Point(longitude, latitude, srid=4326),
+            message=message or "SOS Triggered",
+            status='resolved',
+            resolution_notes="No emergency contacts configured."
+        )
         return f"User {user_id} has no contacts."
 
     alert_instance = EmergencyAlert.objects.create(
         user=user,
-        latitude=latitude,
-        longitude=longitude,
+        location=Point(longitude, latitude, srid=4326),
         message=message or "SOS Triggered",
         status='active'
     )
@@ -56,17 +58,17 @@ def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, messag
         base_sms_body += f". Message: {message}"
 
     if not twilio_client or not TWILIO_PHONE_NUMBER:
-         print(f"SOS Triggered for user {user_id} but Twilio is not configured. Logging only.")
-         alert_instance.status = 'resolved'
-         alert_instance.resolution_notes = "SMS not sent: Twilio service not configured."
-         alert_instance.save()
-         for contact in contacts:
+        print(f"SOS Triggered for user {user_id} but Twilio is not configured. Logging only.")
+        alert_instance.status = 'resolved'
+        alert_instance.resolution_notes = "SMS not sent: Twilio service not configured."
+        alert_instance.save()
+        for contact in contacts:
             EmergencyAlertContact.objects.create(
                 alert=alert_instance,
                 contact=contact,
                 delivery_status='failed_config'
             )
-         return f"SOS for user {user_id} logged, but Twilio not configured."
+        return f"SOS for user {user_id} logged, but Twilio not configured."
 
     for contact in contacts:
         contact_phone = getattr(contact, 'phone_number', None)
@@ -82,7 +84,7 @@ def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, messag
 
         formatted_phone = contact_phone
         if not formatted_phone.startswith('+'):
-             print(f"WARNING: Phone number for contact {contact.name} ({formatted_phone}) may not be in E.164 format. Attempting anyway.")
+            print(f"WARNING: Phone number for contact {contact.name} ({formatted_phone}) may not be in E.164 format. Attempting anyway.")
 
         alert_contact_log = EmergencyAlertContact.objects.create(
             alert=alert_instance,
@@ -107,18 +109,18 @@ def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, messag
             alert_contact_log.response_message = str(e)
             alert_contact_log.save()
         except Exception as e:
-             print(f"Unexpected error sending SMS to {contact.name} ({formatted_phone}): {e}")
-             failure_count += 1
-             alert_contact_log.delivery_status = 'failed_unexpected'
-             alert_contact_log.response_message = str(e)
-             alert_contact_log.save()
+            print(f"Unexpected error sending SMS to {contact.name} ({formatted_phone}): {e}")
+            failure_count += 1
+            alert_contact_log.delivery_status = 'failed_unexpected'
+            alert_contact_log.response_message = str(e)
+            alert_contact_log.save()
 
     if failure_count == 0 and success_count > 0:
         alert_instance.status = 'responded'
         alert_instance.resolution_notes = f"Alerts sent successfully to {success_count} contacts."
     elif success_count > 0:
-         alert_instance.status = 'responded'
-         alert_instance.resolution_notes = f"Alerts sent to {success_count} contacts, failed for {failure_count}."
+        alert_instance.status = 'responded'
+        alert_instance.resolution_notes = f"Alerts sent to {success_count} contacts, failed for {failure_count}."
     else:
         alert_instance.status = 'resolved'
         alert_instance.resolution_notes = f"Failed to send alerts to any of the {contacts.count()} contacts."

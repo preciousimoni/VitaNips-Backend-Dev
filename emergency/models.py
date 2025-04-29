@@ -1,6 +1,7 @@
 # emergency/models.py
 from django.db import models
 from django.conf import settings
+from django.contrib.gis.db import models as gis_models  # Import GeoDjango models
 
 class EmergencyService(models.Model):
     TYPE_CHOICES = (
@@ -19,8 +20,7 @@ class EmergencyService(models.Model):
     alternative_phone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     website = models.URLField(blank=True, null=True)
-    latitude = models.FloatField()
-    longitude = models.FloatField()
+    location = gis_models.PointField(null=True, blank=True, srid=4326)  # GeoDjango PointField
     is_24_hours = models.BooleanField(default=True)
     operating_hours = models.TextField(blank=True, null=True)
     has_emergency_room = models.BooleanField(default=False)
@@ -73,8 +73,7 @@ class EmergencyAlert(models.Model):
     
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='emergency_alerts')
     initiated_at = models.DateTimeField(auto_now_add=True)
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
+    location = gis_models.PointField(null=True, blank=True, srid=4326)  # GeoDjango PointField
     message = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     resolved_at = models.DateTimeField(null=True, blank=True)
