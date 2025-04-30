@@ -1,7 +1,7 @@
 # emergency/models.py
 from django.db import models
 from django.conf import settings
-from django.contrib.gis.db import models as gis_models  # Import GeoDjango models
+from django.contrib.gis.db import models as gis_models
 
 class EmergencyService(models.Model):
     TYPE_CHOICES = (
@@ -20,7 +20,7 @@ class EmergencyService(models.Model):
     alternative_phone = models.CharField(max_length=20, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     website = models.URLField(blank=True, null=True)
-    location = gis_models.PointField(null=True, blank=True, srid=4326)  # GeoDjango PointField
+    location = gis_models.PointField(null=True, blank=True, srid=4326)
     is_24_hours = models.BooleanField(default=True)
     operating_hours = models.TextField(blank=True, null=True)
     has_emergency_room = models.BooleanField(default=False)
