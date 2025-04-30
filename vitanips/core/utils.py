@@ -8,7 +8,7 @@ def send_app_email(to_email: str, subject: str, template_name: str, context: dic
     """Helper function to send templated emails."""
     try:
         html_message = render_to_string(template_name, context)
-        plain_message = strip_tags(html_message) # Generate plain text version
+        plain_message = strip_tags(html_message)
         from_email = settings.DEFAULT_FROM_EMAIL
 
         send_mail(
@@ -19,9 +19,8 @@ def send_app_email(to_email: str, subject: str, template_name: str, context: dic
             html_message=html_message,
             fail_silently=False,
         )
-        print(f"Email sent successfully to {to_email} with subject: {subject}") # For logging
+        print(f"Email sent successfully to {to_email} with subject: {subject}")
         return True
     except Exception as e:
-        # Log the error properly in production
         print(f"Error sending email to {to_email}: {e}")
         return False
