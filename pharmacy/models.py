@@ -1,7 +1,7 @@
 # pharmacy/models.py
 from django.db import models
 from django.conf import settings
-from django.contrib.gis.db import models as gis_models  # Import GeoDjango models
+from django.contrib.gis.db import models as gis_models
 from doctors.models import Prescription, PrescriptionItem
 
 class Pharmacy(models.Model):
@@ -13,6 +13,7 @@ class Pharmacy(models.Model):
     operating_hours = models.TextField()
     is_24_hours = models.BooleanField(default=False)
     offers_delivery = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True, help_text="Is the pharmacy currently operational and accepting orders?")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

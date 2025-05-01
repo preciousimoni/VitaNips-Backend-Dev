@@ -10,7 +10,7 @@ from pharmacy.serializers import (
     MedicationOrderSerializer, MedicationReminderSerializer
 )
 from .permissions import IsPharmacyStaffOfOrderPharmacy
-from doctors.models import Prescription, PrescriptionItem
+from doctors.models import Prescription, PrescriptionItem, Appointment
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Q
@@ -127,24 +127,52 @@ class PharmacyInventoryListView(generics.ListAPIView):
         return PharmacyInventory.objects.filter(pharmacy_id=self.kwargs['pharmacy_id'], in_stock=True)
 
 class CreateOrderFromPrescriptionView(views.APIView):
-    """
-    Creates a MedicationOrder from an existing Prescription.
-    Expects POST request with {'pharmacy_id': <id>} in the body.
-    URL: /api/prescriptions/{prescription_id}/create_order/
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     @transaction.atomic
     def post(self, request, prescription_id, *args, **kwargs):
+        # Fetch Prescription
         prescription = get_object_or_404(Prescription, pk=prescription_id)
-        pharmacy_id = request.data.get('pharmacy_id')
 
+        # --- Validation 1: Check Prescription Ownership ---
+        if prescription.user != request.user:
+            return Response(
+                {"error": "You do not have permission to order from this prescription."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # --- Validation 2: Check Related Appointment Status ---
+        try:
+            # Ensure the related appointment exists and is completed
+            if not prescription.appointment:
+                 # Should ideally not happen due to model constraints, but good to check
+                 return Response(
+                    {"error": "Prescription is not linked to a valid appointment."},
+                    status=status.HTTP_400_BAD_REQUEST
+                 )
+            if prescription.appointment.status != Appointment.StatusChoices.COMPLETED:
+                 return Response(
+                     {"error": f"Cannot create order: The associated appointment (ID: {prescription.appointment.id}) is not marked as 'Completed'. Current status: '{prescription.appointment.get_status_display()}'."},
+                     status=status.HTTP_400_BAD_REQUEST
+                 )
+        except AttributeError:
+             # Handle case where appointment relationship might be broken unexpectedly
+             return Response(
+                {"error": "Error accessing associated appointment details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+             )
+        # --- End Validation 2 ---
+
+
+        # Fetch Pharmacy ID from request body
+        pharmacy_id = request.data.get('pharmacy_id')
         if not pharmacy_id:
             return Response(
                 {"error": "pharmacy_id is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Fetch Pharmacy
         try:
             pharmacy = Pharmacy.objects.get(pk=pharmacy_id)
         except Pharmacy.DoesNotExist:
@@ -152,34 +180,56 @@ class CreateOrderFromPrescriptionView(views.APIView):
                 {"error": f"Pharmacy with ID {pharmacy_id} not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-        if prescription.user != request.user:
-            return Response(
-                {"error": "You do not have permission to order from this prescription."},
-                status=status.HTTP_403_FORBIDDEN
+        except (ValueError, TypeError):
+             return Response(
+                {"error": f"Invalid pharmacy_id format provided."},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
+        # --- Validation 3: Check if Pharmacy is Active ---
+        if not pharmacy.is_active:
+            return Response(
+                {"error": f"The selected pharmacy '{pharmacy.name}' is currently inactive and cannot accept orders."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # --- End Validation 3 ---
+
+
+        # --- Validation 4: Check if Order Already Exists ---
+        # MODIFIED: Return 409 Conflict instead of 200 OK with warning
         existing_order = MedicationOrder.objects.filter(prescription=prescription).first()
         if existing_order:
-            serializer = MedicationOrderSerializer(existing_order)
+            # Serialize existing order to optionally return some info if needed
+            # serializer = MedicationOrderSerializer(existing_order)
             return Response(
-                {"warning": "An order for this prescription already exists.", "order": serializer.data},
-                status=status.HTTP_200_OK
+                {
+                    "error": "An order for this prescription already exists.",
+                    "existing_order_id": existing_order.id,
+                    "existing_order_status": existing_order.status,
+                 },
+                status=status.HTTP_409_CONFLICT # Use 409 Conflict
             )
+        # --- End Validation 4 ---
 
-        order = MedicationOrder.objects.create(
-            user=request.user,
-            pharmacy=pharmacy,
-            prescription=prescription,
-            status='pending',
-        )
 
+        # --- Validation 5: Check if Prescription Has Items ---
         prescription_items = PrescriptionItem.objects.filter(prescription=prescription)
         if not prescription_items.exists():
             return Response(
                 {"error": "Prescription has no items to order."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        # --- End Validation 5 ---
+
+
+        # --- Create Order and Items (If all validations pass) ---
+        order = MedicationOrder.objects.create(
+            user=request.user,
+            pharmacy=pharmacy,
+            prescription=prescription,
+            status=MedicationOrder.StatusChoices.PENDING, # Use choices constants
+            # is_delivery, delivery_address, total_amount, notes would be set later by user/pharmacy
+        )
 
         order_items = []
         for p_item in prescription_items:
@@ -188,12 +238,14 @@ class CreateOrderFromPrescriptionView(views.APIView):
                 prescription_item=p_item,
                 medication_name_text=p_item.medication_name,
                 dosage_text=p_item.dosage,
-                quantity=1,
+                quantity=1, # Default quantity, pharmacy might adjust
+                # price_per_unit will be filled by pharmacy later
             )
             order_items.append(order_item)
 
         MedicationOrderItem.objects.bulk_create(order_items)
 
+        # Serialize the newly created order
         serializer = MedicationOrderSerializer(order)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
