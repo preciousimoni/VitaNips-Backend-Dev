@@ -17,7 +17,7 @@ class EmergencyContactAdmin(admin.ModelAdmin):
 
 @admin.register(EmergencyAlert)
 class EmergencyAlertAdmin(admin.ModelAdmin):
-    list_display = ('user', 'initiated_at', 'status', 'latitude', 'longitude')
+    list_display = ('user', 'initiated_at', 'status')
     search_fields = ('user__email',)
     list_filter = ('status', 'initiated_at')
     ordering = ('-initiated_at',)
