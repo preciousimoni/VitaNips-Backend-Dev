@@ -27,17 +27,23 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.gis',  # Added for GeoDjango support
+    'django.contrib.gis',
     
     # Third-party apps
     'rest_framework',
+    'rest_framework_gis',
+    'django_filters',
     'corsheaders',
+    'storages',
+    'twilio',
+    'push_notifications',
     'rest_framework_simplejwt',
     'django.contrib.sites',
     'allauth',
     'allauth.account',
     'dj_rest_auth',
     'django_celery_beat',
+    'django_celery_results',
     
     # Local apps
     'users',
@@ -196,6 +202,10 @@ CELERY_TASK_SERIALICER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': 3600}
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300
+CELERY_CACHE_BACKEND = 'default'
 
 # --- Email Configuration ---
 # For Development (prints emails to console):
@@ -217,6 +227,22 @@ TWILIO_API_KEY_SID = config('TWILIO_API_KEY_SID', default='')
 TWILIO_API_KEY_SECRET = config('TWILIO_API_KEY_SECRET', default='')
 # Optional: Use Auth Token if not using API Key/Secret for token generation
 # TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+
+# PUSH NOTIFICATIONS SETTINGS
+# See documentation: https://django-push-notifications.readthedocs.io/en/latest/settings.html
+PUSH_NOTIFICATIONS_SETTINGS = {
+    "FCM_API_KEY": os.environ.get("FCM_SERVER_KEY"),
+    "APNS_CERTIFICATE": os.environ.get("APNS_CERTIFICATE_PATH"),
+    "APNS_PRIVATE_KEY_PATH": os.environ.get("APNS_PRIVATE_KEY_PATH"),
+    "APNS_KEY_ID": os.environ.get("APNS_KEY_ID"),
+    "APNS_TEAM_ID": os.environ.get("APNS_TEAM_ID"),
+    "APNS_TOPIC": os.environ.get("APNS_BUNDLE_ID"),
+    "APNS_USE_SANDBOX": os.environ.get("APNS_USE_SANDBOX", "False").lower() == "true",
+    "APNS_USE_ALTERNATIVE_PORT": False,
+    "GCM_POST_URL": "https://fcm.googleapis.com/fcm/send",
+    "GCM_MAX_RECIPIENTS": 1000,
+    "APNS_MAX_RECIPIENTS": 100,
+}
 
 # Logging
 # Ensure log directory exists

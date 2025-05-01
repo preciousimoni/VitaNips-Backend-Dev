@@ -1,34 +1,46 @@
 # users/models.py
-from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.db import models
+from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
 
 class User(AbstractUser):
     email = models.EmailField(_('email address'), unique=True)
-    phone_number = models.CharField(max_length=15, blank=True, null=True)
-    date_of_birth = models.DateField(null=True, blank=True)
-    profile_picture = models.ImageField(upload_to='profile_pics/', null=True, blank=True)
-    
-    # Health-related fields
+    phone_regex = RegexValidator(regex=r'^\+?1?\d{9,15}$', message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed.")
+    phone_number = models.CharField(validators=[phone_regex], max_length=17, blank=True, null=True, unique=True)
+    address = models.TextField(blank=True, null=True)
+    date_of_birth = models.DateField(blank=True, null=True)
+    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+    medical_history_summary = models.TextField(blank=True, null=True)
+    emergency_contact_name = models.CharField(max_length=100, blank=True, null=True)
+    emergency_contact_phone = models.CharField(validators=[phone_regex], max_length=17, blank=True, null=True)
+    emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
     blood_group = models.CharField(max_length=5, blank=True, null=True)
+    genotype = models.CharField(max_length=5, blank=True, null=True)
     allergies = models.TextField(blank=True, null=True)
     chronic_conditions = models.TextField(blank=True, null=True)
-    weight = models.FloatField(null=True, blank=True)  # in kg
-    height = models.FloatField(null=True, blank=True)  # in cm
-    
-    # Emergency contacts
-    emergency_contact_name = models.CharField(max_length=100, blank=True, null=True)
-    emergency_contact_relationship = models.CharField(max_length=50, blank=True, null=True)
-    emergency_contact_phone = models.CharField(max_length=15, blank=True, null=True)
+    is_hmo_member = models.BooleanField(default=False)
+    hmo_provider = models.CharField(max_length=100, blank=True, null=True)
+    hmo_policy_number = models.CharField(max_length=100, blank=True, null=True)
+
+    # Notification Preferences
+    notify_appointment_confirmation_email = models.BooleanField(default=True)
+    notify_appointment_cancellation_email = models.BooleanField(default=True)
+    notify_appointment_reminder_email = models.BooleanField(default=True)
+    notify_prescription_update_email = models.BooleanField(default=True)
+    notify_order_update_email = models.BooleanField(default=True)
+    notify_general_updates_email = models.BooleanField(default=True)
+    notify_refill_reminder_email = models.BooleanField(default=True)
+
+    # SMS Notifications
+    notify_appointment_reminder_sms = models.BooleanField(default=False)
+
+    # --- PUSH NOTIFICATION PREFERENCE ---
+    notify_appointment_reminder_push = models.BooleanField(default=True)
     
     # --- Pharmacy Staff Fields ---
     is_pharmacy_staff = models.BooleanField(_("pharmacy staff status"), default=False, help_text=_("Designates whether the user can log into the pharmacy portal."),)
     works_at_pharmacy = models.ForeignKey('pharmacy.Pharmacy', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_members', help_text=_("The pharmacy this staff member belongs to."),)
-    
-    # --- Notification Preferences ---
-    notify_appointment_reminder_email = models.BooleanField(default=True)
-    notify_appointment_reminder_sms = models.BooleanField(default=False)
-    notify_refill_reminder_email = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
