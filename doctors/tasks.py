@@ -50,7 +50,7 @@ def send_appointment_reminders_task():
     # Find appointments within the reminder windows
     # Using Q objects might be slightly clearer, but the original logic is okay
     upcoming_appointments = Appointment.objects.filter(
-        status__in=[Appointment.StatusChoices.SCHEDULED, Appointment.StatusChoices.CONFIRMED],
+        status__in=[Appointment.status.SCHEDULED, Appointment.status.CONFIRMED],
         date__gte=now.date() # Only future dates
     ).filter(
         # Appointments around 24 hours from now
