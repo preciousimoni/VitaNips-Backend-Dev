@@ -14,7 +14,6 @@ class VaccinationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user']
 class UserSerializer(serializers.ModelSerializer):
     insurance_details = UserInsuranceSerializer(many=True, read_only=True, source='userinsurance_set')
-    emergency_contacts = EmergencyContactSerializer(many=True, read_only=True, source='emergencycontact_set')
     vaccinations = VaccinationSerializer(many=True, read_only=True, source='vaccination_set')
     class Meta:
         model = User
@@ -31,7 +30,7 @@ class UserSerializer(serializers.ModelSerializer):
             'notify_appointment_reminder_push',
             'insurance_details', 'emergency_contacts', 'vaccinations',
         ]
-        read_only_fields = ['id', 'username', 'email', 'insurance_details', 'emergency_contacts', 'vaccinations', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'username', 'email', 'insurance_details', 'vaccinations', 'created_at', 'updated_at']
         extra_kwargs = {
             'password': {'write_only': True}
         }
@@ -64,8 +63,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
              'first_name', 'last_name', 'phone_number', 'address', 'date_of_birth',
-             'profile_picture', 'medical_history_summary', 'emergency_contact_name',
-             'emergency_contact_relationship', 'emergency_contact_phone', 'blood_group', 'genotype', 'allergies',
+             'profile_picture', 'medical_history_summary', 'blood_group', 'genotype', 'allergies',
              'chronic_conditions', 'is_hmo_member', 'hmo_provider', 'hmo_policy_number',
             'notify_appointment_confirmation_email', 'notify_appointment_cancellation_email',
             'notify_appointment_reminder_email', 'notify_prescription_update_email',
