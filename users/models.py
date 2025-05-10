@@ -12,15 +12,12 @@ class User(AbstractUser):
     date_of_birth = models.DateField(blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
     medical_history_summary = models.TextField(blank=True, null=True)
+    
     blood_group = models.CharField(max_length=5, blank=True, null=True)
     genotype = models.CharField(max_length=5, blank=True, null=True)
     allergies = models.TextField(blank=True, null=True)
     chronic_conditions = models.TextField(blank=True, null=True)
-    is_hmo_member = models.BooleanField(default=False)
-    hmo_provider = models.CharField(max_length=100, blank=True, null=True)
-    hmo_policy_number = models.CharField(max_length=100, blank=True, null=True)
 
-    # Notification Preferences
     notify_appointment_confirmation_email = models.BooleanField(default=True)
     notify_appointment_cancellation_email = models.BooleanField(default=True)
     notify_appointment_reminder_email = models.BooleanField(default=True)
@@ -29,22 +26,19 @@ class User(AbstractUser):
     notify_general_updates_email = models.BooleanField(default=True)
     notify_refill_reminder_email = models.BooleanField(default=True)
 
-    # SMS Notifications
     notify_appointment_reminder_sms = models.BooleanField(default=False)
 
-    # --- PUSH NOTIFICATION PREFERENCE ---
     notify_appointment_reminder_push = models.BooleanField(default=True)
-    
-    # --- Pharmacy Staff Fields ---
+
     is_pharmacy_staff = models.BooleanField(_("pharmacy staff status"), default=False, help_text=_("Designates whether the user can log into the pharmacy portal."),)
     works_at_pharmacy = models.ForeignKey('pharmacy.Pharmacy', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_members', help_text=_("The pharmacy this staff member belongs to."),)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
-    
+
     def __str__(self):
         return self.email
 
