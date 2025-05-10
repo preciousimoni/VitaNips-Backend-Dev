@@ -1,3 +1,4 @@
+# pharmacy/serializers.py
 from rest_framework import serializers
 from .models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
 from users.serializers import UserSerializer
