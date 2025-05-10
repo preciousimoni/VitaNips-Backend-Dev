@@ -1,3 +1,4 @@
+# pharmacy/views.py
 from rest_framework import generics, permissions, filters, status, views
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.response import Response
