@@ -8,6 +8,10 @@ from .serializers import (
 )
 from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
+from django.contrib.gis.db.models.functions import Distance
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TriggerSOSView(views.APIView):
     """
@@ -65,17 +69,36 @@ class EmergencyServiceListView(generics.ListAPIView):
 
         latitude = self.request.query_params.get('lat')
         longitude = self.request.query_params.get('lon')
-        radius_km = self.request.query_params.get('radius', default=10)
+        radius_km_str = self.request.query_params.get('radius', default='5') # Default radius 5km
 
         if latitude and longitude:
             try:
-                user_location = Point(float(longitude), float(latitude), srid=4326)
-                radius_km = float(radius_km)
+                lat_float = float(latitude)
+                lon_float = float(longitude)
+                radius_km_float = float(radius_km_str)
+
+                if not (-90 <= lat_float <= 90 and -180 <= lon_float <= 180):
+                    raise ValueError("Latitude or longitude out of valid range.")
+                if not (0 < radius_km_float <= 200): # Example: Max radius 200km
+                    raise ValueError("Search radius out of valid range.")
+
+                user_location = Point(lon_float, lat_float, srid=4326) # Lon, Lat order for Point
                 queryset = queryset.filter(
-                    location__distance_lte=(user_location, D(km=radius_km))
-                )
+                    location__distance_lte=(user_location, D(km=radius_km_float))
+                ).annotate(distance=Distance('location', user_location)).order_by('distance') # Optionally order by distance
+                # Note: .order_by('distance') might override your default .order_by('name')
+                # You might want to apply distance ordering only if location filter is active.
+
             except (ValueError, TypeError) as e:
-                print(f"Error processing location parameters: {e}")
+                logger.warning(
+                    f"Invalid location parameters for proximity search: "
+                    f"lat='{latitude}', lon='{longitude}', radius='{radius_km_str}'. Error: {e}"
+                )
+                # Option: Silently ignore and don't filter by location (as it currently does by falling through)
+                # Option: If you want to inform the frontend, you'd typically raise an APIException
+                # from rest_framework.exceptions import ParseError
+                # raise ParseError("Invalid location or radius parameters provided for proximity search.")
+                # For now, we'll log and proceed without location filtering if params are bad.
                 pass
 
         service_type = self.request.query_params.get('service_type')
