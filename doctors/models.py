@@ -1,6 +1,7 @@
 # doctors/models.py
 from django.db import models
 from django.conf import settings
+# from pharmacy.models import Medication
 
 class Specialty(models.Model):
     name = models.CharField(max_length=100)
@@ -130,11 +131,12 @@ class Prescription(models.Model):
 
 class PrescriptionItem(models.Model):
     prescription = models.ForeignKey(Prescription, on_delete=models.CASCADE, related_name='items')
-    medication_name = models.CharField(max_length=200)
+    medication = models.ForeignKey('pharmacy.Medication', on_delete=models.SET_NULL, null=True, blank=True, help_text="Link to the structured medication entry if available.")
+    medication_name = models.CharField(max_length=200, help_text="Medication name as written, or if no structured entry linked.")
     dosage = models.CharField(max_length=100)
     frequency = models.CharField(max_length=100)
     duration = models.CharField(max_length=100)
     instructions = models.TextField()
     
     def __str__(self):
-        return f"{self.medication_name} - {self.dosage}"
+        return f"{self.medication_name} ({self.medication.name if self.medication else 'N/A'}) - {self.dosage}"
