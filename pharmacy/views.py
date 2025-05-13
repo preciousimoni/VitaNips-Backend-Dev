@@ -1,6 +1,7 @@
 # pharmacy/views.py
 from rest_framework import generics, permissions, filters, status, views
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.serializers import ValidationError
 from rest_framework.response import Response
 from notifications.utils import create_notification
 from pharmacy.models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
@@ -295,14 +296,49 @@ class MedicationReminderListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return MedicationReminder.objects.filter(user=self.request.user)
+        return MedicationReminder.objects.filter(user=self.request.user).select_related('medication')
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        medication_name = self.request.data.get('medication_name')
+        medication_instance = None
+        if medication_name:
+            medication_instance, _ = Medication.objects.get_or_create(
+                name__iexact=medication_name,
+                defaults={
+                    'description': 'Medication details to be updated.',
+                    'dosage_form': 'Unknown',
+                    'strength': 'N/A',
+                }
+            )
+        if medication_instance:
+            serializer.save(user=self.request.user, medication=medication_instance)
+        else:
+            raise ValidationError({'medication_name': 'A valid medication is required.'})
+            serializer.save(user=self.request.user)
+
 
 class MedicationReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MedicationReminderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return MedicationReminder.objects.filter(user=self.request.user)
+        return MedicationReminder.objects.filter(user=self.request.user).select_related('medication')
+
+    def perform_update(self, serializer):
+        medication_name = self.request.data.get('medication_name')
+        medication_instance = None
+        
+        if medication_name:
+            medication_instance, _ = Medication.objects.get_or_create(
+                name__iexact=medication_name,
+                defaults={
+                    'description': 'Medication details to be updated.',
+                    'dosage_form': 'Unknown',
+                    'strength': 'N/A',
+                }
+            )
+        
+        if medication_instance:
+            serializer.save(medication=medication_instance)
+        else:
+            serializer.save()
