@@ -1,54 +1,43 @@
 # pharmacy/serializers.py
 from rest_framework import serializers
-from .models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
+from .models import (
+    Pharmacy, Medication, PharmacyInventory,
+    MedicationOrder, MedicationOrderItem, MedicationReminder
+)
 from users.serializers import UserSerializer
-from doctors.serializers import PrescriptionItemSerializer
 from django.contrib.gis.geos import Point
 
 class PharmacySerializer(serializers.ModelSerializer):
-    # Define latitude and longitude as serializer fields (not model fields)
     latitude = serializers.FloatField(required=False, allow_null=True)
     longitude = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
         model = Pharmacy
         fields = [
-            'id', 'name', 'address', 'phone_number', 'email', 'latitude',
-            'longitude', 'operating_hours', 'is_24_hours', 'offers_delivery',
-            'created_at', 'updated_at'
+            'id', 'name', 'address', 'phone_number', 'email',
+            'latitude', 'longitude', 'operating_hours', 'is_24_hours',
+            'offers_delivery', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def to_representation(self, instance):
-        """
-        Convert the PointField (location) to separate latitude and longitude fields in the response.
-        """
-        representation = super().to_representation(instance)
+        rep = super().to_representation(instance)
         if instance.location:
-            # Extract latitude (y) and longitude (x) from Point
-            representation['latitude'] = instance.location.y
-            representation['longitude'] = instance.location.x
+            rep['latitude'] = instance.location.y
+            rep['longitude'] = instance.location.x
         else:
-            representation['latitude'] = None
-            representation['longitude'] = None
-        return representation
+            rep['latitude'] = None
+            rep['longitude'] = None
+        return rep
 
     def validate(self, data):
-        """
-        Ensure that both latitude and longitude are provided together if one is present.
-        """
         latitude = data.get('latitude')
         longitude = data.get('longitude')
-        if (latitude is not None and longitude is None) or (longitude is not None and latitude is None):
-            raise serializers.ValidationError(
-                "Both latitude and longitude must be provided together."
-            )
+        if (latitude is not None) ^ (longitude is not None):
+            raise serializers.ValidationError("Both latitude and longitude must be provided together.")
         return data
 
     def create(self, validated_data):
-        """
-        Convert latitude and longitude to a PointField for the location.
-        """
         latitude = validated_data.pop('latitude', None)
         longitude = validated_data.pop('longitude', None)
         if latitude is not None and longitude is not None:
@@ -56,36 +45,64 @@ class PharmacySerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        """
-        Update the location PointField if latitude and longitude are provided.
-        """
         latitude = validated_data.pop('latitude', None)
         longitude = validated_data.pop('longitude', None)
         if latitude is not None and longitude is not None:
             validated_data['location'] = Point(longitude, latitude, srid=4326)
-        elif latitude is None and longitude is None:
-            # Preserve existing location if neither is provided
-            validated_data['location'] = instance.location
         return super().update(instance, validated_data)
+
+
+class MedicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Medication
+        fields = [
+            'id', 'name', 'generic_name', 'description', 'dosage_form',
+            'strength', 'manufacturer', 'requires_prescription',
+            'side_effects', 'contraindications', 'storage_instructions',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class PharmacyInventorySerializer(serializers.ModelSerializer):
+    medication = MedicationSerializer(read_only=True)
+
+    class Meta:
+        model = PharmacyInventory
+        fields = ['id', 'pharmacy', 'medication', 'in_stock', 'quantity', 'price', 'last_updated']
+        read_only_fields = ['last_updated']
+
 
 class PharmacyOrderItemViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicationOrderItem
-        fields = [
-            'id', 'medication_name_text', 'dosage_text', 'quantity',
-            'price_per_unit', 'total_price'
-        ]
+        fields = ['id', 'medication_name_text', 'dosage_text', 'quantity', 'price_per_unit', 'total_price']
         read_only_fields = fields
+
+class MedicationOrderItemSerializer(serializers.ModelSerializer):
+    medication_name = serializers.ReadOnlyField(source='medication_name_text')
+    dosage = serializers.ReadOnlyField(source='dosage_text')
+
+    class Meta:
+        model = MedicationOrderItem
+        fields = ['id', 'order', 'prescription_item', 'medication_name', 'dosage', 'quantity', 'price_per_unit', 'total_price']
+        read_only_fields = ['total_price', 'order', 'medication_name', 'dosage']
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        if instance.prescription_item:
+            # Import here to avoid circular import
+            from doctors.serializers import PrescriptionItemSerializer
+            rep['prescription_item_details'] = PrescriptionItemSerializer(instance.prescription_item).data
+        return rep
+
 
 class PharmacyOrderListSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField()
 
     class Meta:
         model = MedicationOrder
-        fields = [
-            'id', 'patient_name', 'status', 'order_date', 'is_delivery',
-            'pickup_or_delivery_date', 'prescription'
-        ]
+        fields = ['id', 'patient_name', 'status', 'order_date', 'is_delivery', 'pickup_or_delivery_date', 'prescription']
 
     def get_patient_name(self, obj):
         if obj.user:
@@ -100,14 +117,28 @@ class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
         model = MedicationOrder
         fields = [
             'id', 'user', 'pharmacy', 'prescription', 'status', 'is_delivery',
-            'delivery_address', 'total_amount', 'order_date', 'pickup_or_delivery_date',
-            'notes', 'items'
+            'delivery_address', 'total_amount', 'order_date',
+            'pickup_or_delivery_date', 'notes', 'items'
         ]
-        
         read_only_fields = [
-            'id', 'user', 'pharmacy', 'prescription', 'order_date', 'items',
-            'is_delivery', 'delivery_address', 'total_amount'
+            'id', 'user', 'pharmacy', 'prescription', 'order_date',
+            'items', 'is_delivery', 'delivery_address', 'total_amount'
         ]
+
+class MedicationOrderSerializer(serializers.ModelSerializer):
+    items = MedicationOrderItemSerializer(many=True, read_only=True)
+    pharmacy = PharmacySerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = MedicationOrder
+        fields = [
+            'id', 'user', 'pharmacy', 'prescription', 'status', 'is_delivery',
+            'delivery_address', 'total_amount', 'order_date',
+            'pickup_or_delivery_date', 'notes', 'items'
+        ]
+        read_only_fields = ['user', 'order_date', 'items', 'status', 'total_amount']
+
 
 class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
     ALLOWED_STATUS_TRANSITIONS = {
@@ -119,9 +150,7 @@ class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MedicationOrder
-        fields = [
-            'status', 'notes', 'pickup_or_delivery_date', 'total_amount'
-        ]
+        fields = ['status', 'notes', 'pickup_or_delivery_date', 'total_amount']
 
     def validate_status(self, value):
         if self.instance:
@@ -134,46 +163,6 @@ class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
                 )
         return value
 
-class MedicationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Medication
-        fields = [
-            'id', 'name', 'generic_name', 'description', 'dosage_form', 'strength',
-            'manufacturer', 'requires_prescription', 'side_effects', 'contraindications',
-            'storage_instructions', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['created_at', 'updated_at']
-
-class PharmacyInventorySerializer(serializers.ModelSerializer):
-    medication = MedicationSerializer(read_only=True)
-
-    class Meta:
-        model = PharmacyInventory
-        fields = ['id', 'pharmacy', 'medication', 'in_stock', 'quantity', 'price', 'last_updated']
-        read_only_fields = ['last_updated']
-
-class MedicationOrderItemSerializer(serializers.ModelSerializer):
-    medication_name = serializers.ReadOnlyField(source='medication_name_text')
-    dosage = serializers.ReadOnlyField(source='dosage_text')
-
-    class Meta:
-        model = MedicationOrderItem
-        fields = ['id', 'order', 'prescription_item', 'medication_name', 'dosage', 'quantity', 'price_per_unit', 'total_price']
-        read_only_fields = ['total_price', 'order', 'medication_name', 'dosage']
-
-class MedicationOrderSerializer(serializers.ModelSerializer):
-    items = MedicationOrderItemSerializer(many=True, read_only=True)
-    pharmacy = PharmacySerializer(read_only=True)
-    user = UserSerializer(read_only=True)
-
-    class Meta:
-        model = MedicationOrder
-        fields = [
-            'id', 'user', 'pharmacy', 'prescription', 'status', 'is_delivery',
-            'delivery_address', 'total_amount', 'order_date', 'pickup_or_delivery_date',
-            'notes', 'items'
-        ]
-        read_only_fields = ['user', 'order_date', 'items', 'status', 'total_amount']
 
 class MedicationReminderSerializer(serializers.ModelSerializer):
     medication_display = MedicationSerializer(source='medication', read_only=True)
@@ -183,20 +172,18 @@ class MedicationReminderSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False
     )
-    medication_name_input = serializers.CharField(write_only=True, required=True, help_text="Name of the medication for the reminder.")
-
+    medication_name_input = serializers.CharField(
+        write_only=True,
+        required=True,
+        help_text="Name of the medication for the reminder."
+    )
 
     class Meta:
         model = MedicationReminder
         fields = [
-            'id', 'user',
-            'medication_display',
-            'medication_id',
-            'medication_name_input',
-            'prescription_item',
-            'start_date', 'end_date', 'time_of_day', 'frequency',
-            'custom_frequency', 'dosage', 'notes', 'is_active',
-            'created_at', 'updated_at'
+            'id', 'user', 'medication_display', 'medication_id', 'medication_name_input',
+            'prescription_item', 'start_date', 'end_date', 'time_of_day', 'frequency',
+            'custom_frequency', 'dosage', 'notes', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
         extra_kwargs = {
@@ -207,5 +194,3 @@ class MedicationReminderSerializer(serializers.ModelSerializer):
         if not data.get('medication') and not data.get('medication_name_input'):
             raise serializers.ValidationError("Either medication_id or medication_name_input is required.")
         return data
-
-   

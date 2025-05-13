@@ -1,5 +1,6 @@
 # doctors/serializers.py
 from rest_framework import serializers
+
 from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem
 
 class SpecialtySerializer(serializers.ModelSerializer):
@@ -64,9 +65,32 @@ class AppointmentSerializer(serializers.ModelSerializer):
         return data
 
 class PrescriptionItemSerializer(serializers.ModelSerializer):
+    # Move the medication serializer import inside the to_representation method
+    # to break the circular import
+    medication_details = serializers.SerializerMethodField()
+    
+    # Use deferred import and queryset assignment for medication_id
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from pharmacy.models import Medication
+        self.fields['medication_id'] = serializers.PrimaryKeyRelatedField(
+            queryset=Medication.objects.all(),
+            source='medication',
+            write_only=True,
+            allow_null=True,
+            required=False
+        )
+
     class Meta:
         model = PrescriptionItem
-        fields = ['id', 'prescription', 'medication_name', 'dosage', 'frequency', 'duration', 'instructions']
+        fields = ['id', 'prescription', 'medication_id', 'medication_details', 'medication_name', 'dosage', 'frequency', 'duration', 'instructions']
+
+    def get_medication_details(self, obj):
+        if obj.medication:
+            # Import here to avoid circular import
+            from pharmacy.serializers import MedicationSerializer
+            return MedicationSerializer(obj.medication).data
+        return None
 
 class PrescriptionSerializer(serializers.ModelSerializer):
     items = PrescriptionItemSerializer(many=True, read_only=True)
