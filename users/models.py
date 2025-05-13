@@ -17,6 +17,8 @@ class User(AbstractUser):
     genotype = models.CharField(max_length=5, blank=True, null=True)
     allergies = models.TextField(blank=True, null=True)
     chronic_conditions = models.TextField(blank=True, null=True)
+    weight = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text="Weight in kg")
+    height = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text="Height in cm")
 
     notify_appointment_confirmation_email = models.BooleanField(default=True)
     notify_appointment_cancellation_email = models.BooleanField(default=True)
