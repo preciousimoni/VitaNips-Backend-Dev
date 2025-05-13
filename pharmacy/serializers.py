@@ -82,19 +82,19 @@ class PharmacyOrderItemViewSerializer(serializers.ModelSerializer):
 class MedicationOrderItemSerializer(serializers.ModelSerializer):
     medication_name = serializers.ReadOnlyField(source='medication_name_text')
     dosage = serializers.ReadOnlyField(source='dosage_text')
+    prescription_item_details = serializers.SerializerMethodField()
 
     class Meta:
         model = MedicationOrderItem
-        fields = ['id', 'order', 'prescription_item', 'medication_name', 'dosage', 'quantity', 'price_per_unit', 'total_price']
-        read_only_fields = ['total_price', 'order', 'medication_name', 'dosage']
+        fields = ['id', 'order', 'prescription_item', 'prescription_item_details', 'medication_name', 'dosage', 'quantity', 'price_per_unit', 'total_price']
+        read_only_fields = ['total_price', 'order', 'medication_name', 'dosage', 'prescription_item_details']
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        if instance.prescription_item:
+    def get_prescription_item_details(self, obj):
+        if obj.prescription_item:
             # Import here to avoid circular import
-            from doctors.serializers import PrescriptionItemSerializer
-            rep['prescription_item_details'] = PrescriptionItemSerializer(instance.prescription_item).data
-        return rep
+            from doctors.serializers import BasePrescriptionItemSerializer
+            return BasePrescriptionItemSerializer(obj.prescription_item).data
+        return None
 
 
 class PharmacyOrderListSerializer(serializers.ModelSerializer):
