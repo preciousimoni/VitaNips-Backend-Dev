@@ -176,13 +176,36 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'order_date', 'items', 'status', 'total_amount']
 
 class MedicationReminderSerializer(serializers.ModelSerializer):
-    medication = MedicationSerializer(read_only=True)
+    medication_display = MedicationSerializer(source='medication', read_only=True)
+    medication_id = serializers.PrimaryKeyRelatedField(
+        queryset=Medication.objects.all(),
+        source='medication',
+        write_only=True,
+        required=False
+    )
+    medication_name_input = serializers.CharField(write_only=True, required=True, help_text="Name of the medication for the reminder.")
+
 
     class Meta:
         model = MedicationReminder
         fields = [
-            'id', 'user', 'medication', 'prescription_item', 'start_date', 'end_date',
-            'time_of_day', 'frequency', 'custom_frequency', 'dosage', 'notes',
-            'is_active', 'created_at', 'updated_at'
+            'id', 'user',
+            'medication_display',
+            'medication_id',
+            'medication_name_input',
+            'prescription_item',
+            'start_date', 'end_date', 'time_of_day', 'frequency',
+            'custom_frequency', 'dosage', 'notes', 'is_active',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'prescription_item': {'required': False, 'allow_null': True}
+        }
+
+    def validate(self, data):
+        if not data.get('medication') and not data.get('medication_name_input'):
+            raise serializers.ValidationError("Either medication_id or medication_name_input is required.")
+        return data
+
+   
