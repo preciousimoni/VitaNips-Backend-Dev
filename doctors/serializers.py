@@ -2,7 +2,7 @@
 from rest_framework import serializers
 from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem
 from pharmacy.models import Medication
-from pharmacy.serializers import MedicationSerializer
+# from pharmacy.serializers import MedicationSerializer
 
 class SpecialtySerializer(serializers.ModelSerializer):
     class Meta:
@@ -84,6 +84,7 @@ class DoctorPrescriptionItemCreateSerializer(serializers.ModelSerializer):
         ]
 
 class DoctorPrescriptionItemDisplaySerializer(serializers.ModelSerializer):
+    from pharmacy.serializers import MedicationSerializer
     medication_display = MedicationSerializer(source='medication', read_only=True)
 
     class Meta:
