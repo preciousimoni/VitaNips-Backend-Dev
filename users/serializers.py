@@ -21,7 +21,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'phone_number', 'address', 'date_of_birth', 'profile_picture',
+            'phone_number', 'address', 'date_of_birth', 'address', 'profile_picture',
             'medical_history_summary',
             'blood_group', 'genotype', 'allergies',
             'chronic_conditions',
@@ -30,7 +30,7 @@ class UserSerializer(serializers.ModelSerializer):
             'notify_order_update_email', 'notify_general_updates_email',
             'notify_refill_reminder_email', 'notify_appointment_reminder_sms',
             'notify_appointment_reminder_push',
-            'insurance_details', 'emergency_contacts', 'vaccinations',
+            'insurance_details', 'emergency_contacts', 'vaccinations', 'weight', 'height',
         ]
         read_only_fields = ['id', 'username', 'email', 'insurance_details', 'emergency_contacts', 'vaccinations', 'created_at', 'updated_at']
         extra_kwargs = {
@@ -65,7 +65,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'first_name', 'last_name', 'phone_number', 'address', 'date_of_birth',
-             'profile_picture', 'medical_history_summary',
+             'address', 'profile_picture', 'medical_history_summary',
              'blood_group', 'genotype', 'allergies',
              'chronic_conditions',
             'notify_appointment_confirmation_email', 'notify_appointment_cancellation_email',
