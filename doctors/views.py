@@ -1,17 +1,19 @@
 # doctors/views.py
 import datetime
 from django.conf import settings
-from rest_framework import generics, permissions, filters, views, status
+from rest_framework import viewsets, generics, permissions, filters, views, status
 from django.urls import reverse
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VideoGrant
 from notifications.utils import create_notification
-from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription
+from .permissions import IsDoctorUser, IsDoctorAssociatedWithAppointment, IsPrescribingDoctor
+from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem
 from .serializers import (
     SpecialtySerializer, DoctorSerializer, DoctorReviewSerializer,
-    DoctorAvailabilitySerializer, AppointmentSerializer, PrescriptionSerializer
+    DoctorAvailabilitySerializer, AppointmentSerializer, PrescriptionSerializer,
+    DoctorPrescriptionCreateSerializer, DoctorPrescriptionListDetailSerializer,DoctorEligibleAppointmentSerializer
 )
 
 class SpecialtyListView(generics.ListAPIView):
@@ -185,3 +187,48 @@ class PrescriptionDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return Prescription.objects.filter(user=self.request.user)
+    
+class DoctorEligibleAppointmentListView(generics.ListAPIView):
+    serializer_class = DoctorEligibleAppointmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+
+    def get_queryset(self):
+        doctor_profile = self.request.user.doctor_profile
+        return Appointment.objects.filter(
+            doctor=doctor_profile,
+            status=Appointment.StatusChoices.COMPLETED
+        ).order_by('-date', '-start_time')
+
+
+class DoctorPrescriptionViewSet(viewsets.ModelViewSet):
+    queryset = Prescription.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+
+    def get_serializer_class(self):
+        if self.action == 'create' or self.action == 'update' or self.action == 'partial_update':
+            return DoctorPrescriptionCreateSerializer
+        return DoctorPrescriptionListDetailSerializer
+
+    def get_queryset(self):
+        return Prescription.objects.filter(doctor=self.request.user.doctor_profile).order_by('-date_prescribed')
+
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy', 'retrieve']:
+            self.permission_classes = [permissions.IsAuthenticated, IsDoctorUser, IsPrescribingDoctor]
+        return super().get_permissions()
+
+    def perform_create(self, serializer):
+        appointment = serializer.validated_data['appointment']
+        serializer.save(
+            doctor=self.request.user.doctor_profile,
+            user=appointment.user
+        )
+        patient = appointment.user
+        create_notification(
+            recipient=patient,
+            actor=self.request.user,
+            verb=f"Dr. {self.request.user.doctor_profile.last_name} has issued a new prescription for your appointment on {appointment.date.strftime('%b %d')}.",
+            level='prescription',
+            target_url=f"/prescriptions/{serializer.instance.id}"
+        )
+        print(f"New prescription notification created for user {patient.id} for prescription {serializer.instance.id}")
