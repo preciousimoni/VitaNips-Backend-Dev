@@ -12,7 +12,8 @@ User = get_user_model()
 class VaccinationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vaccination
-        fields = ['id', 'vaccine_name', 'date_administered', 'user', 'notes']
+        fields = ['id', 'vaccine_name', 'date_administered', 'dose_number', 'next_dose_date', 
+                 'administered_at', 'batch_number', 'user', 'notes']
         read_only_fields = ['id', 'user']
 
 
@@ -98,7 +99,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'first_name', 'last_name', 'phone_number', 'address', 'date_of_birth',
-            'address', 'profile_picture', 'medical_history_summary',
+            'profile_picture', 'medical_history_summary',
             'blood_group', 'genotype', 'allergies',
             'chronic_conditions',
             'notify_appointment_confirmation_email', 'notify_appointment_cancellation_email',
