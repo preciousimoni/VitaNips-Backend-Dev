@@ -47,7 +47,6 @@ def send_appointment_reminders_task():
         Q(date=reminder_threshold_1h_start.date(), start_time__range=(reminder_threshold_1h_start.time(), reminder_threshold_1h_end.time()))
     ).select_related('user', 'doctor').distinct()
 
-
     appointment_count = upcoming_appointments.count()
     if appointment_count > 0:
         logger.info(f"Found {appointment_count} appointments for reminder checks.")
@@ -153,7 +152,6 @@ def send_appointment_reminders_task():
                 sent_count['push'] += 1
         elif not push_enabled and user.notify_appointment_reminder_push:
              logger.warning(f"Push notifications enabled for user {user.id} but PUSH_NOTIFICATIONS_SETTINGS seem incomplete.")
-
 
     summary = (f"Sent reminders for {appointment_count} appointments. "
                f"In-App: {sent_count['in_app']}. "
