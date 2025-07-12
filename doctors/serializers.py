@@ -126,6 +126,7 @@ class DoctorPrescriptionCreateSerializer(serializers.ModelSerializer):
 
         if appointment.doctor != doctor_profile:
             raise serializers.ValidationError("This appointment is not assigned to you.")
+        # Fixed: Use the correct status choice
         if appointment.status != Appointment.StatusChoices.COMPLETED:
             raise serializers.ValidationError(f"Prescriptions can only be written for 'Completed' appointments. This one is '{appointment.get_status_display()}'.")
         if Prescription.objects.filter(appointment=appointment).exists():
@@ -150,13 +151,19 @@ class DoctorPrescriptionCreateSerializer(serializers.ModelSerializer):
             medication_obj, _ = Medication.objects.get_or_create(
                 name__iexact=medication_name,
                 defaults={
+                    'name': medication_name,  # Add the name field explicitly
                     'description': f'Medication: {medication_name}',
                     'dosage_form': 'To be specified',
                     'strength': item_data.get('dosage', 'To be specified'),
                     'requires_prescription': True,
                 }
             )
-            PrescriptionItem.objects.create(prescription=prescription, medication=medication_obj, medication_name=medication_name, **item_data)
+            PrescriptionItem.objects.create(
+                prescription=prescription, 
+                medication=medication_obj, 
+                medication_name=medication_name, 
+                **item_data
+            )
         return prescription
 
 class DoctorPrescriptionListDetailSerializer(serializers.ModelSerializer):

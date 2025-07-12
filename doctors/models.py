@@ -87,26 +87,24 @@ class DoctorAvailability(models.Model):
         verbose_name_plural = "Doctor Availabilities"
 
 class Appointment(models.Model):
-    STATUS_CHOICES = (
-        ('scheduled', 'Scheduled'),
-        ('confirmed', 'Confirmed'),
-        ('cancelled', 'Cancelled'),
-        ('completed', 'Completed'),
-        ('no_show', 'No Show'),
-    )
+    class StatusChoices(models.TextChoices):
+        SCHEDULED = 'scheduled', 'Scheduled'
+        CONFIRMED = 'confirmed', 'Confirmed'
+        CANCELLED = 'cancelled', 'Cancelled'
+        COMPLETED = 'completed', 'Completed'
+        NO_SHOW = 'no_show', 'No Show'
     
-    TYPE_CHOICES = (
-        ('in_person', 'In-Person'),
-        ('virtual', 'Virtual'),
-    )
+    class TypeChoices(models.TextChoices):
+        IN_PERSON = 'in_person', 'In-Person'
+        VIRTUAL = 'virtual', 'Virtual'
     
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='appointments')
-    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='appointments')
+    doctor = models.ForeignKey('Doctor', on_delete=models.CASCADE, related_name='appointments')
     date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
-    appointment_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='in_person')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='scheduled')
+    appointment_type = models.CharField(max_length=10, choices=TypeChoices.choices, default=TypeChoices.IN_PERSON)
+    status = models.CharField(max_length=10, choices=StatusChoices.choices, default=StatusChoices.SCHEDULED)
     reason = models.TextField()
     notes = models.TextField(blank=True, null=True)
     followup_required = models.BooleanField(default=False)
@@ -115,6 +113,7 @@ class Appointment(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.doctor.full_name} - {self.date} {self.start_time}"
+
 
 class Prescription(models.Model):
     appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name='prescriptions')
