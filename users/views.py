@@ -10,6 +10,11 @@ from .models import MedicalHistory, Vaccination
 
 User = get_user_model()
 
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
 class UserRegistrationView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = UserRegistrationSerializer

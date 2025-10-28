@@ -1,16 +1,111 @@
-<!DOCTYPE html>
-<html>
-<head><title>{{ subject }}</title></head>
-<body>
-    <p>Hi {{ user.first_name|default:'there' }},</p>
-    <p>This is a reminder for your upcoming appointment:</p>
-    <ul>
-        <li><strong>Doctor:</strong> Dr. {{ appointment.doctor.first_name }} {{ appointment.doctor.last_name }}</li>
-        <li><strong>Date:</strong> {{ appointment.date|date:"l, F j, Y" }}</li>
-        <li><strong>Time:</strong> {{ appointment.start_time|time:"g:i A" }}</li>
-        <li><strong>Type:</strong> {{ appointment.get_appointment_type_display }}</li>
+{% extends "emails/base.html" %}
+
+{% block title %}Appointment Reminder - VitaNips{% endblock %}
+
+{% block content %}
+<!-- Greeting -->
+<p class="greeting">
+    Hi {{ user.first_name|default:"there" }}! 👋
+</p>
+
+<p style="font-size: 16px; color: #4b5563; margin-bottom: 20px;">
+    This is a friendly reminder about your upcoming appointment with {{ doctor_name|default:"your doctor" }}.
+</p>
+
+<!-- Appointment Details Box -->
+<div class="info-box">
+    <h2 style="margin: 0 0 15px 0; color: #1f2937; font-size: 20px;">
+        📅 Appointment Details
+    </h2>
+    
+    <div class="info-item">
+        <span class="info-label">👨‍⚕️ Doctor:</span>
+        <span class="info-value">{{ doctor_name|default:"N/A" }}</span>
+    </div>
+    
+    <div class="info-item">
+        <span class="info-label">📆 Date:</span>
+        <span class="info-value">{{ appointment.date|date:"l, F j, Y" }}</span>
+    </div>
+    
+    <div class="info-item">
+        <span class="info-label">🕐 Time:</span>
+        <span class="info-value">{{ appointment.start_time|time:"g:i A" }}</span>
+    </div>
+    
+    <div class="info-item">
+        <span class="info-label">💼 Type:</span>
+        <span class="info-value">{{ appointment.get_appointment_type_display|default:"In-Person" }}</span>
+    </div>
+    
+    {% if appointment.reason %}
+    <div class="info-item">
+        <span class="info-label">📋 Reason:</span>
+        <span class="info-value">{{ appointment.reason }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Virtual Appointment Notice -->
+{% if appointment.appointment_type == 'virtual' %}
+<div class="success-box">
+    <p style="margin: 0; color: #065f46; font-weight: 600;">
+        💻 This is a Virtual Appointment
+    </p>
+    <p style="margin: 5px 0 0 0; color: #047857; font-size: 14px;">
+        You'll be able to join the video call from the VitaNips app at your scheduled time.
+    </p>
+</div>
+{% endif %}
+
+<!-- Action Buttons -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 25px 0;">
+    <tr>
+        <td align="center">
+            <a href="https://vitanips.com/appointments/{{ appointment.id }}" class="button" style="background-color: #3b82f6; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
+                View Appointment Details
+            </a>
+        </td>
+    </tr>
+</table>
+
+<!-- Important Notes -->
+<div class="alert-box">
+    <p style="margin: 0; color: #92400e; font-weight: 600;">
+        ⏰ Important Reminders:
+    </p>
+    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #78350f;">
+        <li>Please arrive 10-15 minutes early for in-person appointments</li>
+        <li>Bring your insurance card and a valid ID</li>
+        <li>Prepare any questions you'd like to discuss with your doctor</li>
+        {% if appointment.appointment_type == 'virtual' %}
+        <li>Ensure you have a stable internet connection for virtual appointments</li>
+        {% endif %}
     </ul>
-    <p>If you need to reschedule or cancel, please visit the VitaNips app.</p>
-    <p>Thanks,<br>The VitaNips Team</p>
-</body>
-</html>
+</div>
+
+<hr class="divider">
+
+<!-- Need to Reschedule? -->
+<p style="font-size: 15px; color: #6b7280; margin: 20px 0 10px 0;">
+    <strong>Need to reschedule or cancel?</strong>
+</p>
+<p style="font-size: 15px; color: #6b7280; margin: 0;">
+    Please log in to your VitaNips account or contact our support team at least 24 hours before your appointment time.
+</p>
+
+<!-- Closing -->
+<p style="margin-top: 30px; font-size: 16px; color: #1f2937;">
+    We look forward to seeing you!
+</p>
+
+<p style="margin: 5px 0 0 0; font-size: 16px; color: #4b5563;">
+    Best regards,<br>
+    <strong>The VitaNips Team</strong>
+</p>
+{% endblock %}
+
+{% block footer_text %}
+You're receiving this email because you have an upcoming appointment with VitaNips.<br>
+To manage your notification preferences, <a href="https://vitanips.com/settings/notifications" style="color: #3b82f6;">click here</a>.
+{% endblock %}

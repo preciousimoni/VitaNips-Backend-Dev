@@ -1,12 +1,13 @@
 # users/urls.py
 from django.urls import path
 from .views import (
-    UserRegistrationView, UserProfileView,
+    UserListView, UserRegistrationView, UserProfileView,
     MedicalHistoryListCreateView, MedicalHistoryDetailView,
     VaccinationListCreateView, VaccinationDetailView
 )
 
 urlpatterns = [
+    path('', UserListView.as_view(), name='user-list'),
     path('register/', UserRegistrationView.as_view(), name='user-register'),
     path('profile/', UserProfileView.as_view(), name='user-profile'),
     path('medical-history/', MedicalHistoryListCreateView.as_view(), name='medical-history-list'),
