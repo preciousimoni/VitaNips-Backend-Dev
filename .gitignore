@@ -151,3 +151,5 @@ target/
 
 cert.crt
 cert.key
+
+firebase-service-account.json

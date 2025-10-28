@@ -1,8 +1,140 @@
-<!DOCTYPE html>
-<html>
-<head><title>{{ subject }}</title></head>
-<body>
-    <p>Hi {{ user.first_name|default:'there' }},</p>
-    <p>This is a reminder for your upcoming medication:</p>
-</body>
-</html>
+{% extends "emails/base.html" %}
+
+{% block title %}Medication Reminder - VitaNips{% endblock %}
+
+{% block content %}
+<!-- Greeting -->
+<p class="greeting">
+    Hi {{ user.first_name|default:"there" }}! 👋
+</p>
+
+<p style="font-size: 16px; color: #4b5563; margin-bottom: 20px;">
+    It's time to take your medication. Here are the details:
+</p>
+
+<!-- Medication Details Box -->
+<div class="info-box">
+    <h2 style="margin: 0 0 15px 0; color: #1f2937; font-size: 20px;">
+        💊 Medication Information
+    </h2>
+    
+    <div class="info-item">
+        <span class="info-label">💊 Medication:</span>
+        <span class="info-value" style="font-weight: 600; color: #3b82f6;">
+            {{ medication.name|default:reminder.medication.name }}
+        </span>
+    </div>
+    
+    {% if medication.generic_name %}
+    <div class="info-item">
+        <span class="info-label">🔬 Generic Name:</span>
+        <span class="info-value">{{ medication.generic_name }}</span>
+    </div>
+    {% endif %}
+    
+    <div class="info-item">
+        <span class="info-label">💉 Dosage:</span>
+        <span class="info-value">{{ reminder.dosage }}</span>
+    </div>
+    
+    <div class="info-item">
+        <span class="info-label">🕐 Scheduled Time:</span>
+        <span class="info-value">{{ reminder.time_of_day|time:"g:i A" }}</span>
+    </div>
+    
+    <div class="info-item">
+        <span class="info-label">📆 Frequency:</span>
+        <span class="info-value">{{ reminder.get_frequency_display }}</span>
+    </div>
+    
+    {% if reminder.notes %}
+    <div class="info-item">
+        <span class="info-label">📝 Notes:</span>
+        <span class="info-value">{{ reminder.notes }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Important Instructions -->
+{% if medication.description or medication.side_effects %}
+<div class="alert-box">
+    <p style="margin: 0 0 10px 0; color: #92400e; font-weight: 600;">
+        ⚠️ Important Information:
+    </p>
+    
+    {% if medication.description %}
+    <p style="margin: 5px 0; color: #78350f; font-size: 14px;">
+        <strong>About this medication:</strong> {{ medication.description|truncatewords:50 }}
+    </p>
+    {% endif %}
+    
+    {% if medication.side_effects %}
+    <p style="margin: 5px 0; color: #78350f; font-size: 14px;">
+        <strong>Possible side effects:</strong> {{ medication.side_effects|truncatewords:30 }}
+    </p>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Storage Instructions -->
+{% if medication.storage_instructions %}
+<div class="success-box">
+    <p style="margin: 0; color: #065f46; font-weight: 600;">
+        🌡️ Storage Instructions
+    </p>
+    <p style="margin: 5px 0 0 0; color: #047857; font-size: 14px;">
+        {{ medication.storage_instructions }}
+    </p>
+</div>
+{% endif %}
+
+<!-- Action Button -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 25px 0;">
+    <tr>
+        <td align="center">
+            <a href="https://vitanips.com/medications/reminders" class="button" style="background-color: #10b981; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
+                ✓ Mark as Taken
+            </a>
+        </td>
+    </tr>
+</table>
+
+<hr class="divider">
+
+<!-- Health Tips -->
+<p style="font-size: 15px; color: #6b7280; margin: 20px 0 10px 0;">
+    <strong>💡 Medication Tips:</strong>
+</p>
+<ul style="margin: 5px 0; padding-left: 20px; color: #6b7280; font-size: 14px;">
+    <li>Take your medication at the same time each day for best results</li>
+    <li>Don't skip doses even if you feel better</li>
+    <li>Contact your doctor if you experience any unusual side effects</li>
+    <li>Never share your medication with others</li>
+    <li>Check the expiration date before taking</li>
+</ul>
+
+<hr class="divider">
+
+<!-- Need Help? -->
+<p style="font-size: 15px; color: #6b7280; margin: 20px 0 10px 0;">
+    <strong>Need to refill or have questions?</strong>
+</p>
+<p style="font-size: 15px; color: #6b7280; margin: 0;">
+    Log in to your VitaNips account to request refills, view your prescription history, or contact your doctor directly.
+</p>
+
+<!-- Closing -->
+<p style="margin-top: 30px; font-size: 16px; color: #1f2937;">
+    Stay healthy and take care!
+</p>
+
+<p style="margin: 5px 0 0 0; font-size: 16px; color: #4b5563;">
+    Best regards,<br>
+    <strong>The VitaNips Team</strong>
+</p>
+{% endblock %}
+
+{% block footer_text %}
+You're receiving this email because you have an active medication reminder in VitaNips.<br>
+To manage your reminders and notification preferences, <a href="https://vitanips.com/settings/notifications" style="color: #3b82f6;">click here</a>.
+{% endblock %}

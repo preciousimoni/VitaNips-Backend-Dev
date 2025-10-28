@@ -13,6 +13,11 @@ from django.utils.translation import gettext_lazy as _
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# GDAL/GEOS Configuration for GeoDjango
+# These paths are for macOS with Homebrew installations
+GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.11.4_1/lib/libgdal.37.dylib'
+GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.0/lib/libgeos_c.dylib'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
@@ -75,7 +80,7 @@ ROOT_URLCONF = 'vitanips.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -95,9 +100,9 @@ DJANGO_ENV = config('DJANGO_ENV', default='development')
 if DJANGO_ENV == 'development':
     DATABASES = {
         'default': {
-            'ENGINE': 'django.contrib.gis.db.backends.postgis',  # Use PostGIS for development
+            'ENGINE': 'django.contrib.gis.db.backends.postgis',
             'NAME': config('DEV_DB_NAME', default='vitanips_dev'),
-            'USER': config('DEV_DB_USER', default='postgres'),
+            'USER': config('DEV_DB_USER', default=os.environ.get('USER', 'postgres')),
             'PASSWORD': config('DEV_DB_PASSWORD', default=''),
             'HOST': config('DEV_DB_HOST', default='localhost'),
             'PORT': config('DEV_DB_PORT', default='5432'),
@@ -224,41 +229,90 @@ CELERY_TASK_TIME_LIMIT = 300
 CELERY_CACHE_BACKEND = 'default'
 
 # --- Email Configuration ---
-# For Development (prints emails to console):
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@vitanips.local') # Your default sender
+# Intelligently select email backend based on environment and available credentials
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='VitaNips <noreply@vitanips.com>')
+SERVER_EMAIL = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
 
-# For Production (using django-anymail with SendGrid example):
-# ANYMAIL = {
-#     "SENDGRID_API_KEY": config('SENDGRID_API_KEY', default=''),
-#     # "SENDGRID_GENERATE_MESSAGE_ID": True, # Optional
-# }
-# EMAIL_BACKEND = "anymail.backends.sendgrid.EmailBackend" # Or other backend (e.g., SES)
-# DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='VitaNips <noreply@yourdomain.com>')
-# SERVER_EMAIL = config('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL) # For error emails
+# SMTP Configuration (Gmail, etc.)
+if EMAIL_BACKEND == 'django.core.mail.backends.smtp.EmailBackend':
+    EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+    EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+    EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+    EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+    EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+
+# Django Anymail (SendGrid, AWS SES, Mailgun, etc.)
+# Install with: pip install django-anymail[sendgrid] or django-anymail[amazon-ses]
+if EMAIL_BACKEND in ['anymail.backends.sendgrid.EmailBackend', 
+                      'anymail.backends.amazon_ses.EmailBackend',
+                      'anymail.backends.mailgun.EmailBackend']:
+    ANYMAIL = {}
+    
+    # SendGrid Configuration
+    if 'sendgrid' in EMAIL_BACKEND:
+        ANYMAIL = {
+            "SENDGRID_API_KEY": config('SENDGRID_API_KEY', default=''),
+            "SENDGRID_GENERATE_MESSAGE_ID": True,
+            "SENDGRID_MERGE_FIELD_FORMAT": "-{}-",
+        }
+    
+    # AWS SES Configuration
+    elif 'amazon_ses' in EMAIL_BACKEND:
+        ANYMAIL = {
+            "AMAZON_SES_REGION": config('AWS_SES_REGION_NAME', default='us-east-1'),
+        }
+        # AWS credentials should be set in AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+    
+    # Mailgun Configuration
+    elif 'mailgun' in EMAIL_BACKEND:
+        ANYMAIL = {
+            "MAILGUN_API_KEY": config('MAILGUN_API_KEY', default=''),
+            "MAILGUN_SENDER_DOMAIN": config('MAILGUN_SENDER_DOMAIN', default=''),
+        }
 
 # --- Twilio Configuration ---
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TWILIO_API_KEY_SID = config('TWILIO_API_KEY_SID', default='')
 TWILIO_API_KEY_SECRET = config('TWILIO_API_KEY_SECRET', default='')
-# Optional: Use Auth Token if not using API Key/Secret for token generation
-# TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 
-# PUSH NOTIFICATIONS SETTINGS
-# See documentation: https://django-push-notifications.readthedocs.io/en/latest/settings.html
+# --- Push Notifications Configuration ---
+# FCM HTTP v1 API (Modern, Recommended)
+FIREBASE_SERVICE_ACCOUNT_KEY_PATH = BASE_DIR / config('FIREBASE_SERVICE_ACCOUNT_KEY', default='firebase-service-account.json')
+
 PUSH_NOTIFICATIONS_SETTINGS = {
-    "FCM_API_KEY": os.environ.get("FCM_SERVER_KEY"),
-    "APNS_CERTIFICATE": os.environ.get("APNS_CERTIFICATE_PATH"),
-    "APNS_PRIVATE_KEY_PATH": os.environ.get("APNS_PRIVATE_KEY_PATH"),
-    "APNS_KEY_ID": os.environ.get("APNS_KEY_ID"),
-    "APNS_TEAM_ID": os.environ.get("APNS_TEAM_ID"),
-    "APNS_TOPIC": os.environ.get("APNS_BUNDLE_ID"),
-    "APNS_USE_SANDBOX": os.environ.get("APNS_USE_SANDBOX", "False").lower() == "true",
+    # Firebase Cloud Messaging (FCM) - HTTP v1 API
+    # Download service account JSON from Firebase Console
+    "FCM_SERVICE_ACCOUNT_KEY": str(FIREBASE_SERVICE_ACCOUNT_KEY_PATH) if FIREBASE_SERVICE_ACCOUNT_KEY_PATH.exists() else None,
+    
+    # Legacy API (deprecated but kept for backward compatibility)
+    # Only used if service account key is not available
+    "FCM_API_KEY": config('FCM_SERVER_KEY', default=None),
+    
+    # Apple Push Notification Service (APNS) - For iOS apps
+    "APNS_CERTIFICATE": config('APNS_CERTIFICATE_PATH', default=None),
+    "APNS_PRIVATE_KEY_PATH": config('APNS_PRIVATE_KEY_PATH', default=None),
+    "APNS_KEY_ID": config('APNS_KEY_ID', default=None),
+    "APNS_TEAM_ID": config('APNS_TEAM_ID', default=None),
+    "APNS_TOPIC": config('APNS_BUNDLE_ID', default=None),
+    "APNS_USE_SANDBOX": config('APNS_USE_SANDBOX', default=True, cast=bool),
     "APNS_USE_ALTERNATIVE_PORT": False,
-    "GCM_POST_URL": "https://fcm.googleapis.com/fcm/send",
-    "GCM_MAX_RECIPIENTS": 1000,
+    
+    # API Settings
+    "FCM_MAX_RECIPIENTS": 1000,
     "APNS_MAX_RECIPIENTS": 100,
 }
+
+# Log push notification configuration status
+if FIREBASE_SERVICE_ACCOUNT_KEY_PATH.exists():
+    logger.info(f"✓ FCM configured with service account: {FIREBASE_SERVICE_ACCOUNT_KEY_PATH.name}")
+elif PUSH_NOTIFICATIONS_SETTINGS.get("FCM_API_KEY"):
+    logger.warning("⚠ FCM using legacy API key (deprecated). Consider migrating to service account.")
+else:
+    logger.warning("⚠ FCM not configured. Push notifications will be disabled.")
 
 # Logging
 # Ensure log directory exists
