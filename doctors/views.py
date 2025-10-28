@@ -1,5 +1,6 @@
 # doctors/views.py
 import datetime
+import logging
 from django.conf import settings
 from rest_framework import viewsets, generics, permissions, filters, views, status
 from django.urls import reverse
@@ -15,6 +16,8 @@ from .serializers import (
     DoctorAvailabilitySerializer, AppointmentSerializer, PrescriptionSerializer,
     DoctorPrescriptionCreateSerializer, DoctorPrescriptionListDetailSerializer,DoctorEligibleAppointmentSerializer
 )
+
+logger = logging.getLogger(__name__)
 
 class SpecialtyListView(generics.ListAPIView):
     queryset = Specialty.objects.all()
@@ -187,6 +190,136 @@ class PrescriptionDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return Prescription.objects.filter(user=self.request.user)
+
+
+class ForwardPrescriptionView(views.APIView):
+    """
+    Forward a prescription to a selected pharmacy by creating a medication order.
+    POST /api/doctors/prescriptions/<pk>/forward/
+    Body: {"pharmacy_id": <int>}
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk, *args, **kwargs):
+        # Import here to avoid circular imports
+        from pharmacy.models import Pharmacy, MedicationOrder, MedicationOrderItem
+        from django.db import transaction
+        
+        # Get the prescription
+        try:
+            prescription = Prescription.objects.select_related('appointment', 'user', 'doctor').get(
+                pk=pk,
+                user=request.user  # Ensure user owns this prescription
+            )
+        except Prescription.DoesNotExist:
+            return Response(
+                {"error": "Prescription not found or you don't have permission to access it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get pharmacy_id from request
+        pharmacy_id = request.data.get('pharmacy_id')
+        if not pharmacy_id:
+            return Response(
+                {"error": "pharmacy_id is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate pharmacy exists and is active
+        try:
+            pharmacy = Pharmacy.objects.get(pk=pharmacy_id, is_active=True)
+        except Pharmacy.DoesNotExist:
+            return Response(
+                {"error": "Pharmacy not found or is inactive."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if appointment is completed
+        if prescription.appointment.status != 'completed':
+            return Response(
+                {"error": f"Cannot forward prescription. The appointment must be completed first. Current status: {prescription.appointment.get_status_display()}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if order already exists for this prescription
+        existing_order = MedicationOrder.objects.filter(prescription=prescription).first()
+        if existing_order:
+            return Response(
+                {
+                    "error": "An order for this prescription already exists.",
+                    "order_id": existing_order.id,
+                    "pharmacy": existing_order.pharmacy.name,
+                    "status": existing_order.status
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Check if prescription has items
+        prescription_items = PrescriptionItem.objects.filter(prescription=prescription)
+        if not prescription_items.exists():
+            return Response(
+                {"error": "Prescription has no items to order."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create the order
+        try:
+            with transaction.atomic():
+                # Create medication order
+                order = MedicationOrder.objects.create(
+                    user=request.user,
+                    pharmacy=pharmacy,
+                    prescription=prescription,
+                    status='pending',
+                    notes=f"Order created from prescription #{prescription.id}"
+                )
+                
+                # Create order items from prescription items
+                order_items = []
+                for p_item in prescription_items:
+                    order_item = MedicationOrderItem(
+                        order=order,
+                        prescription_item=p_item,
+                        medication_name_text=p_item.medication_name,
+                        dosage_text=p_item.dosage,
+                        quantity=1,  # Default quantity, pharmacy can adjust
+                    )
+                    order_items.append(order_item)
+                
+                MedicationOrderItem.objects.bulk_create(order_items)
+                
+                # Create notification for user
+                create_notification(
+                    recipient=request.user,
+                    verb=f"Your prescription has been forwarded to {pharmacy.name}. Order #{order.id} is being processed.",
+                    level='order',
+                    target_url=f"/orders/{order.id}"
+                )
+                
+                # Log the action
+                logger.info(
+                    f"Prescription {prescription.id} forwarded to pharmacy {pharmacy.id} "
+                    f"by user {request.user.id}. Order {order.id} created."
+                )
+                
+                # Return the created order details
+                from pharmacy.serializers import MedicationOrderSerializer
+                serializer = MedicationOrderSerializer(order)
+                return Response(
+                    {
+                        "message": f"Prescription successfully forwarded to {pharmacy.name}.",
+                        "order": serializer.data
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+                
+        except Exception as e:
+            logger.error(f"Error forwarding prescription {pk}: {str(e)}")
+            return Response(
+                {"error": "An error occurred while creating the order. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     
 class DoctorEligibleAppointmentListView(generics.ListAPIView):
     serializer_class = DoctorEligibleAppointmentSerializer

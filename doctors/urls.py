@@ -6,7 +6,7 @@ from .views import (
     SpecialtyListView, DoctorListView, DoctorDetailView,
     DoctorReviewListCreateView, DoctorAvailabilityListView,
     AppointmentListCreateView, AppointmentDetailView,
-    PrescriptionListView, PrescriptionDetailView,
+    PrescriptionListView, PrescriptionDetailView, ForwardPrescriptionView,
     GetTwilioTokenView, DoctorEligibleAppointmentListView,
     DoctorPrescriptionViewSet,
 )
@@ -26,6 +26,7 @@ urlpatterns = [
     path('appointments/<int:appointment_id>/video_token/', GetTwilioTokenView.as_view(), name='appointment-video-token'),
     path('prescriptions/', PrescriptionListView.as_view(), name='prescription-list'),
     path('prescriptions/<int:pk>/', PrescriptionDetailView.as_view(), name='prescription-detail'),
+    path('prescriptions/<int:pk>/forward/', ForwardPrescriptionView.as_view(), name='prescription-forward'),
     path('<int:doctor_id>/eligible-appointments/', DoctorEligibleAppointmentListView.as_view(), name='doctor-eligible-appointments'),
     path('', include(router.urls)),
 ]
