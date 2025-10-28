@@ -43,6 +43,7 @@ class TriggerSOSView(views.APIView):
             )
 
         try:
+            # Try to queue the task asynchronously with Celery
             send_sos_alerts_task.delay(
                 user_id=request.user.id,
                 latitude=lat_float,
@@ -54,11 +55,26 @@ class TriggerSOSView(views.APIView):
                 status=status.HTTP_202_ACCEPTED
             )
         except Exception as e:
-            print(f"ERROR queueing SOS task for user {request.user.id}: {e}")
-            return Response(
-                {"error": "Could not initiate SOS alert process. Please try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            # If Celery/Redis is not available, execute the task synchronously
+            logger.warning(f"Celery unavailable for user {request.user.id}: {e}. Running SOS task synchronously.")
+            try:
+                # Execute the task function directly (synchronously)
+                send_sos_alerts_task(
+                    user_id=request.user.id,
+                    latitude=lat_float,
+                    longitude=lon_float,
+                    message=message
+                )
+                return Response(
+                    {"status": "SOS signal received and processed."},
+                    status=status.HTTP_200_OK
+                )
+            except Exception as sync_error:
+                logger.error(f"ERROR executing SOS task synchronously for user {request.user.id}: {sync_error}")
+                return Response(
+                    {"error": "Could not initiate SOS alert process. Please try again later."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
 class EmergencyServiceListView(generics.ListAPIView):
     serializer_class = EmergencyServiceSerializer
