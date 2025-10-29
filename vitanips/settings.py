@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'dj_rest_auth',
     'django_celery_beat',
     'django_celery_results',
+    'drf_spectacular',
     
     # Local apps
     'users',
@@ -191,7 +192,43 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10
+    'PAGE_SIZE': 10,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'VitaNips Healthcare API',
+    'DESCRIPTION': 'Comprehensive healthcare management platform API - Appointments, Prescriptions, Telehealth, and more',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'CONTACT': {
+        'name': 'VitaNips Support',
+        'email': 'support@vitanips.com',
+    },
+    'LICENSE': {
+        'name': 'Proprietary',
+    },
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api/',
+    'SWAGGER_UI_SETTINGS': {
+        'deepLinking': True,
+        'persistAuthorization': True,
+        'displayOperationId': True,
+        'filter': True,
+    },
+    'TAGS': [
+        {'name': 'Authentication', 'description': 'User registration, login, and JWT management'},
+        {'name': 'Users', 'description': 'User profile and account management'},
+        {'name': 'Doctors', 'description': 'Doctor profiles, availability, and reviews'},
+        {'name': 'Appointments', 'description': 'Book, manage, and track appointments'},
+        {'name': 'Prescriptions', 'description': 'View and manage prescriptions'},
+        {'name': 'Pharmacy', 'description': 'Pharmacies, medications, and orders'},
+        {'name': 'Health', 'description': 'Vital signs, symptoms, medical documents'},
+        {'name': 'Insurance', 'description': 'Insurance coverage and claims'},
+        {'name': 'Emergency', 'description': 'Emergency services and SOS alerts'},
+        {'name': 'Notifications', 'description': 'In-app notifications and preferences'},
+    ],
 }
 
 # JWT settings
