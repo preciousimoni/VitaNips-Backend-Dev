@@ -10,6 +10,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'actor_username',
+            'verb',
             'level',
             'unread',
             'timestamp',
