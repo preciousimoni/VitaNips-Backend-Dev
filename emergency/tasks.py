@@ -86,6 +86,18 @@ def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, messag
         if not formatted_phone.startswith('+'):
             print(f"WARNING: Phone number for contact {contact.name} ({formatted_phone}) may not be in E.164 format. Attempting anyway.")
 
+        # Skip if To and From numbers are the same
+        if formatted_phone == TWILIO_PHONE_NUMBER:
+            print(f"SKIPPING: Contact {contact.name} has same number as Twilio sender ({formatted_phone}). Cannot send SMS to self.")
+            failure_count += 1
+            EmergencyAlertContact.objects.create(
+                alert=alert_instance,
+                contact=contact,
+                delivery_status='failed_same_number',
+                response_message='To and From numbers cannot be the same'
+            )
+            continue
+
         alert_contact_log = EmergencyAlertContact.objects.create(
             alert=alert_instance,
             contact=contact,
@@ -98,18 +110,18 @@ def send_sos_alerts_task(user_id: int, latitude: float, longitude: float, messag
                 from_=TWILIO_PHONE_NUMBER,
                 to=formatted_phone
             )
-            print(f"SMS sent to {contact.name} ({formatted_phone}), SID: {message_instance.sid}, Status: {message_instance.status}")
+            print(f"✓ SMS sent to {contact.name} ({formatted_phone}), SID: {message_instance.sid}, Status: {message_instance.status}")
             alert_contact_log.delivery_status = message_instance.status
             alert_contact_log.save()
             success_count += 1
         except TwilioRestException as e:
-            print(f"Error sending SMS to {contact.name} ({formatted_phone}): {e}")
+            print(f"✗ Error sending SMS to {contact.name} ({formatted_phone}): {e}")
             failure_count += 1
             alert_contact_log.delivery_status = 'failed_send_error'
             alert_contact_log.response_message = str(e)
             alert_contact_log.save()
         except Exception as e:
-            print(f"Unexpected error sending SMS to {contact.name} ({formatted_phone}): {e}")
+            print(f"✗ Unexpected error sending SMS to {contact.name} ({formatted_phone}): {e}")
             failure_count += 1
             alert_contact_log.delivery_status = 'failed_unexpected'
             alert_contact_log.response_message = str(e)
