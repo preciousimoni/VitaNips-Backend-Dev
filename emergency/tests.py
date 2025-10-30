@@ -76,7 +76,8 @@ class EmergencyContactModelTest(TestCase):
             relationship='Mother',
             phone_number='+1234567890'
         )
-        expected = f"{contact.name} ({contact.relationship}) - {self.user.username}"
+        # Model __str__ uses get_relationship_display() and user.email
+        expected = f"{contact.name} ({contact.get_relationship_display()}) - Contact for {self.user.email}"
         self.assertEqual(str(contact), expected)
 
 
@@ -276,7 +277,8 @@ class EmergencyAlertModelTest(TestCase):
         self.assertEqual(alert.user, self.user)
         self.assertEqual(alert.status, 'active')
         self.assertEqual(alert.message, 'Help needed')
-        self.assertIsNotNone(alert.triggered_at)
+        # Model uses initiated_at (auto_now_add), not triggered_at
+        self.assertIsNotNone(alert.initiated_at)
     
     def test_emergency_alert_status_choices(self):
         """Test all valid status choices"""
