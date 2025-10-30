@@ -91,9 +91,9 @@ class MedicationOrderItemSerializer(serializers.ModelSerializer):
 
     def get_prescription_item_details(self, obj):
         if obj.prescription_item:
-            # Import here to avoid circular import
-            from doctors.serializers import BasePrescriptionItemSerializer
-            return BasePrescriptionItemSerializer(obj.prescription_item).data
+            # Import here to avoid circular import; use PrescriptionItemSerializer
+            from doctors.serializers import PrescriptionItemSerializer
+            return PrescriptionItemSerializer(obj.prescription_item).data
         return None
 
 

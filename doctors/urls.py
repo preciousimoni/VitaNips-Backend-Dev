@@ -10,6 +10,7 @@ from .views import (
     GetTwilioTokenView, DoctorEligibleAppointmentListView,
     DoctorPrescriptionViewSet,
 )
+from .video_views import GenerateVideoTokenView, EndVideoSessionView
 
 router = DefaultRouter()
 router.register(r'doctor-prescriptions', DoctorPrescriptionViewSet, basename='doctor-prescriptions')
@@ -24,6 +25,8 @@ urlpatterns = [
     path('appointments/', AppointmentListCreateView.as_view(), name='appointment-list'),
     path('appointments/<int:pk>/', AppointmentDetailView.as_view(), name='appointment-detail'),
     path('appointments/<int:appointment_id>/video_token/', GetTwilioTokenView.as_view(), name='appointment-video-token'),
+    path('appointments/<int:appointment_id>/video/token/', GenerateVideoTokenView.as_view(), name='video-token'),
+    path('appointments/<int:appointment_id>/video/end/', EndVideoSessionView.as_view(), name='video-end'),
     path('prescriptions/', PrescriptionListView.as_view(), name='prescription-list'),
     path('prescriptions/<int:pk>/', PrescriptionDetailView.as_view(), name='prescription-detail'),
     path('prescriptions/<int:pk>/forward/', ForwardPrescriptionView.as_view(), name='prescription-forward'),
