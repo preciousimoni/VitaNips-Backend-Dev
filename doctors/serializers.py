@@ -27,12 +27,26 @@ class DoctorReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorReview
         fields = ['id', 'doctor', 'user', 'rating', 'comment', 'created_at', 'updated_at']
-        read_only_fields = ['user', 'created_at', 'updated_at']
+        read_only_fields = ['doctor', 'user', 'created_at', 'updated_at']
 
     def validate_rating(self, value):
         if not 1 <= value <= 5:
             raise serializers.ValidationError("Rating must be between 1 and 5.")
         return value
+    
+    def validate(self, data):
+        # Check if user has already reviewed this doctor
+        request = self.context.get('request')
+        doctor_id = self.context.get('view').kwargs.get('doctor_id')
+        
+        if request and doctor_id:
+            user = request.user
+            if DoctorReview.objects.filter(doctor_id=doctor_id, user=user).exists():
+                raise serializers.ValidationError(
+                    "You have already submitted a review for this doctor. Each user can only review a doctor once."
+                )
+        
+        return data
 
 class DoctorAvailabilitySerializer(serializers.ModelSerializer):
     class Meta:
