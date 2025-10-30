@@ -9,14 +9,22 @@ class SpecialtySerializer(serializers.ModelSerializer):
         model = Specialty
         fields = ['id', 'name', 'description']
 
+class DoctorUserSerializer(serializers.Serializer):
+    """Nested serializer for user data in DoctorSerializer"""
+    id = serializers.IntegerField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+
 class DoctorSerializer(serializers.ModelSerializer):
     specialties = SpecialtySerializer(many=True, read_only=True)
     average_rating = serializers.ReadOnlyField()
+    user = DoctorUserSerializer(read_only=True)
 
     class Meta:
         model = Doctor
         fields = [
-            'id', 'first_name', 'last_name', 'full_name', 'specialties',
+            'id', 'user', 'first_name', 'last_name', 'full_name', 'specialties',
             'profile_picture', 'gender', 'years_of_experience', 'education',
             'bio', 'languages_spoken', 'consultation_fee', 'is_available_for_virtual',
             'is_verified', 'average_rating', 'created_at', 'updated_at'

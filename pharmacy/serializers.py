@@ -16,7 +16,7 @@ class PharmacySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'address', 'phone_number', 'email',
             'latitude', 'longitude', 'operating_hours', 'is_24_hours',
-            'offers_delivery', 'created_at', 'updated_at'
+            'offers_delivery', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 

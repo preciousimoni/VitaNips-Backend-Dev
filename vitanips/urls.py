@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/insurance/', include('insurance.urls')),
     path('api/emergency/', include('emergency.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/admin/', include('vitanips.core.admin_urls')),
 ]
 
 # Serve media files in development
