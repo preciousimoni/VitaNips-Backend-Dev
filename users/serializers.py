@@ -43,7 +43,7 @@ class UserSerializer(serializers.ModelSerializer):
             'notify_refill_reminder_email', 'notify_appointment_reminder_sms',
             'notify_appointment_reminder_push', 'is_pharmacy_staff', 'works_at_pharmacy',
             'insurance_details', 'emergency_contacts', 'vaccinations',
-            'is_doctor', 'doctor_id', 'created_at', 'updated_at',
+            'is_doctor', 'doctor_id', 'is_staff', 'is_superuser', 'is_active', 'created_at', 'updated_at',
             # 'doctor_profile_summary',
         ]
         read_only_fields = ['id', 'username', 'email',
