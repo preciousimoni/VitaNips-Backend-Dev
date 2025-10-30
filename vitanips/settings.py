@@ -265,6 +265,32 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300
 CELERY_CACHE_BACKEND = 'default'
 
+# Celery Beat Schedule
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'check-appointment-reminders': {
+        'task': 'notifications.tasks.check_appointment_reminders',
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
+    },
+    'check-medication-refill-reminders': {
+        'task': 'notifications.tasks.check_medication_refill_reminders',
+        'schedule': crontab(hour='9', minute='0'),  # Daily at 9 AM
+    },
+    'process-scheduled-notifications': {
+        'task': 'notifications.tasks.process_scheduled_notifications',
+        'schedule': crontab(minute='*/10'),  # Every 10 minutes
+    },
+    'retry-failed-deliveries': {
+        'task': 'notifications.tasks.retry_failed_deliveries',
+        'schedule': crontab(minute='*/30'),  # Every 30 minutes
+    },
+    'cleanup-old-notifications': {
+        'task': 'notifications.tasks.cleanup_old_notifications',
+        'schedule': crontab(hour='2', minute='0'),  # Daily at 2 AM
+    },
+}
+
 # --- Email Configuration ---
 # Intelligently select email backend based on environment and available credentials
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')

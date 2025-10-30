@@ -1,11 +1,113 @@
 # notifications/views.py
-from rest_framework import generics, permissions, status, views
+from rest_framework import viewsets, status, permissions, views
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.utils import timezone
-from .models import Notification
-from .serializers import NotificationSerializer
 from rest_framework.pagination import PageNumberPagination
+from django.utils import timezone
+from .models import Notification, NotificationPreference, NotificationDelivery
+from .serializers import (
+    NotificationSerializer, NotificationPreferenceSerializer,
+    NotificationDeliverySerializer
+)
 from push_notifications.models import APNSDevice, GCMDevice
+
+
+class NotificationPagination(PageNumberPagination):
+    page_size = 15
+    page_size_query_param = 'page_size'
+    max_page_size = 50
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint for user notifications
+    
+    list: Get all notifications for the current user
+    retrieve: Get specific notification details
+    mark_as_read: Mark notification as read
+    mark_all_as_read: Mark all notifications as read
+    get_unread_count: Get count of unread notifications
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = NotificationPagination
+
+    def get_queryset(self):
+        return Notification.objects.filter(
+            recipient=self.request.user,
+            dismissed=False
+        ).select_related('actor').prefetch_related('deliveries')
+    
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        """Mark a single notification as read"""
+        notification = self.get_object()
+        notification.mark_as_read()
+        return Response({'status': 'notification marked as read'})
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        """Mark all notifications as read"""
+        updated = self.get_queryset().filter(unread=True).update(
+            unread=False,
+            read_at=timezone.now()
+        )
+        return Response({'status': f'{updated} notifications marked as read'})
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Get count of unread notifications"""
+        count = self.get_queryset().filter(unread=True).count()
+        return Response({'unread_count': count})
+    
+    @action(detail=True, methods=['post'])
+    def dismiss(self, request, pk=None):
+        """Dismiss a notification"""
+        notification = self.get_object()
+        notification.dismiss()
+        return Response({'status': 'notification dismissed'})
+    
+    @action(detail=False, methods=['get'])
+    def by_category(self, request):
+        """Get notifications grouped by category"""
+        category = request.query_params.get('category')
+        if category:
+            notifications = self.get_queryset().filter(category=category)
+        else:
+            notifications = self.get_queryset()
+        
+        page = self.paginate_queryset(notifications)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(notifications, many=True)
+        return Response(serializer.data)
+
+
+class NotificationPreferenceViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for notification preferences
+    
+    retrieve: Get current user's preferences
+    update: Update notification preferences
+    """
+    serializer_class = NotificationPreferenceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get', 'patch', 'put']
+
+    def get_object(self):
+        obj, _ = NotificationPreference.objects.get_or_create(
+            user=self.request.user
+        )
+        return obj
+    
+    def list(self, request):
+        """Get current user's preferences"""
+        obj = self.get_object()
+        serializer = self.get_serializer(obj)
+        return Response(serializer.data)
+
 
 class DeviceRegistrationView(views.APIView):
     """
@@ -21,33 +123,26 @@ class DeviceRegistrationView(views.APIView):
     def post(self, request, *args, **kwargs):
         user = request.user
         registration_id = request.data.get('registration_id')
-        device_type = request.data.get('type', '').lower() # 'web', 'ios', 'android'
+        device_type = request.data.get('type', '').lower()
 
         if not registration_id:
             return Response({"error": "registration_id is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         if device_type not in ['web', 'ios', 'android']:
-             return Response({"error": "Invalid or missing 'type'. Must be 'web', 'ios', or 'android'."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid or missing 'type'. Must be 'web', 'ios', or 'android'."}, status=status.HTTP_400_BAD_REQUEST)
 
         created = False
         try:
             if device_type == 'ios':
-                # Use APNSDevice for iOS
-                # device_id is optional - registration_id is key here
                 device, created = APNSDevice.objects.update_or_create(
                     registration_id=registration_id,
                     defaults={'user': user, 'active': True}
                 )
             else:
-                # Use GCMDevice for Android and Web (FCM)
-                # cloud_message_type determines FCM/GCM, defaults often work for FCM
                 device, created = GCMDevice.objects.update_or_create(
                     registration_id=registration_id,
-                    defaults={'user': user, 'active': True, 'cloud_message_type': 'FCM'} # Be explicit for FCM
+                    defaults={'user': user, 'active': True, 'cloud_message_type': 'FCM'}
                 )
-
-            # Optional: Deactivate other devices for the same user if only one active device is desired
-            # e.g., GCMDevice.objects.filter(user=user).exclude(pk=device.pk).update(active=False)
 
             action = "registered" if created else "updated"
             return Response(
@@ -56,66 +151,5 @@ class DeviceRegistrationView(views.APIView):
             )
 
         except Exception as e:
-            # Log the error for debugging
             print(f"Error registering device for user {user.id}: {e}")
             return Response({"error": "Failed to register device."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-class NotificationPagination(PageNumberPagination):
-    page_size = 15
-    page_size_query_param = 'page_size'
-    max_page_size = 50
-
-class NotificationListView(generics.ListAPIView):
-    """Lists notifications for the logged-in user. Supports filtering by 'unread'."""
-    serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = NotificationPagination
-
-    def get_queryset(self):
-        queryset = Notification.objects.filter(recipient=self.request.user)
-        unread_filter = self.request.query_params.get('unread')
-        if unread_filter is not None:
-            is_unread = unread_filter.lower() in ['true', '1', 'yes']
-            queryset = queryset.filter(unread=is_unread)
-        return queryset
-
-class MarkNotificationAsReadView(views.APIView):
-    """Marks a specific notification as read."""
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, pk, *args, **kwargs):
-        try:
-            notification = Notification.objects.get(pk=pk, recipient=request.user)
-            notification.mark_as_read()
-            serializer = NotificationSerializer(notification)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except Notification.DoesNotExist:
-            return Response({"detail": "Not found or permission denied."}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-             return Response({"detail": "An error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class MarkAllNotificationsAsReadView(views.APIView):
-    """Marks all unread notifications for the user as read."""
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request, *args, **kwargs):
-        try:
-            updated_count = Notification.objects.filter(recipient=request.user, unread=True).update(unread=False)
-            return Response({"status": f"{updated_count} notifications marked as read"}, status=status.HTTP_200_OK)
-        except Exception as e:
-             # Log error e
-             return Response({"detail": "An error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class UnreadNotificationCountView(views.APIView):
-     """Returns the count of unread notifications."""
-     permission_classes = [permissions.IsAuthenticated]
-
-     def get(self, request, *args, **kwargs):
-         try:
-             count = Notification.objects.filter(recipient=request.user, unread=True).count()
-             return Response({"unread_count": count}, status=status.HTTP_200_OK)
-         except Exception as e:
-              # Log error e
-              return Response({"detail": "An error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
