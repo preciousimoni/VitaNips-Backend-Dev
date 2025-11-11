@@ -10,6 +10,8 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 
+app_name = 'vitanips'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     

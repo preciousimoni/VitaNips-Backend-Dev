@@ -1,5 +1,5 @@
 # notifications/views.py
-from rest_framework import viewsets, status, permissions, views
+from rest_framework import generics, viewsets, status, permissions, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
@@ -85,28 +85,22 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
-class NotificationPreferenceViewSet(viewsets.ModelViewSet):
+class NotificationPreferenceView(generics.RetrieveUpdateAPIView):
     """
-    API endpoint for notification preferences
+    API endpoint for the current user's notification preferences.
     
-    retrieve: Get current user's preferences
-    update: Update notification preferences
+    get: Retrieve notification preferences.
+    put: Update notification preferences.
+    patch: Partially update notification preferences.
     """
     serializer_class = NotificationPreferenceSerializer
     permission_classes = [permissions.IsAuthenticated]
-    http_method_names = ['get', 'patch', 'put']
 
     def get_object(self):
         obj, _ = NotificationPreference.objects.get_or_create(
             user=self.request.user
         )
         return obj
-    
-    def list(self, request):
-        """Get current user's preferences"""
-        obj = self.get_object()
-        serializer = self.get_serializer(obj)
-        return Response(serializer.data)
 
 
 class DeviceRegistrationView(views.APIView):

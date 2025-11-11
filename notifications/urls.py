@@ -3,17 +3,17 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     NotificationViewSet,
-    NotificationPreferenceViewSet,
+    NotificationPreferenceView,
     DeviceRegistrationView,
 )
 
 app_name = 'notifications'
 
 router = DefaultRouter()
-router.register(r'notifications', NotificationViewSet, basename='notification')
-router.register(r'preferences', NotificationPreferenceViewSet, basename='preference')
+router.register(r'', NotificationViewSet, basename='notification')
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('preferences/', NotificationPreferenceView.as_view(), name='notification-preferences'),
     path('devices/register/', DeviceRegistrationView.as_view(), name='device-register'),
+    path('', include(router.urls)),
 ]

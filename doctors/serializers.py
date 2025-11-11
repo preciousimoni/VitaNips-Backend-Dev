@@ -63,14 +63,29 @@ class DoctorAvailabilitySerializer(serializers.ModelSerializer):
         read_only_fields = ['doctor']
 
 class AppointmentSerializer(serializers.ModelSerializer):
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    patient_email = serializers.EmailField(source='user.email', read_only=True)
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    
     class Meta:
         model = Appointment
         fields = [
             'id', 'user', 'doctor', 'date', 'start_time', 'end_time',
             'appointment_type', 'status', 'reason', 'notes', 'followup_required',
+            'patient_name', 'patient_email', 'doctor_name',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['user', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'patient_name', 'patient_email', 'doctor_name', 'created_at', 'updated_at']
+
+    def get_patient_name(self, obj):
+        if obj.user:
+            return obj.user.get_full_name() or obj.user.username
+        return None
+    
+    def get_doctor_name(self, obj):
+        if obj.doctor:
+            return f"Dr. {obj.doctor.last_name}" if obj.doctor.last_name else f"Dr. {obj.doctor.first_name}"
+        return None
 
     def validate(self, data):
         instance = getattr(self, 'instance', None)
@@ -265,3 +280,37 @@ class PrescriptionSerializer(serializers.ModelSerializer):
         model = Prescription
         fields = ['id', 'appointment', 'user', 'doctor', 'date_prescribed', 'diagnosis', 'notes', 'items', 'created_at', 'updated_at']
         read_only_fields = ['user', 'doctor', 'date_prescribed', 'created_at', 'updated_at']
+
+
+class VirtualSessionSerializer(serializers.ModelSerializer):
+    """Serializer for VirtualSession model"""
+    appointment_id = serializers.IntegerField(source='appointment.id', read_only=True)
+    patient_name = serializers.SerializerMethodField()
+    doctor_name = serializers.SerializerMethodField()
+    appointment_date = serializers.SerializerMethodField()
+    
+    class Meta:
+        from .models import VirtualSession
+        model = VirtualSession
+        fields = [
+            'id', 'appointment_id', 'room_name', 'room_sid',
+            'status', 'started_at', 'ended_at', 'duration_minutes',
+            'recording_url', 'notes', 'patient_name', 'doctor_name',
+            'appointment_date', 'created_at', 'updated_at'
+        ]
+        read_only_fields = fields
+    
+    def get_patient_name(self, obj):
+        if obj.appointment and obj.appointment.patient:
+            return obj.appointment.patient.get_full_name()
+        return "Unknown"
+    
+    def get_doctor_name(self, obj):
+        if obj.appointment and obj.appointment.doctor:
+            return obj.appointment.doctor.user.get_full_name()
+        return "Unknown"
+    
+    def get_appointment_date(self, obj):
+        if obj.appointment:
+            return obj.appointment.date_time.isoformat() if hasattr(obj.appointment, 'date_time') else str(obj.appointment.date)
+        return None

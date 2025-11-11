@@ -59,19 +59,27 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Appointment.objects.filter(user=self.request.user)
+        user = self.request.user
+        # If user is a doctor, show appointments where they are the doctor
+        if hasattr(user, 'doctor_profile') and user.doctor_profile:
+            return Appointment.objects.filter(doctor=user.doctor_profile)
+        # Otherwise, show appointments where they are the patient
+        return Appointment.objects.filter(user=user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
 class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AppointmentSerializer
-    permission_classes = [permissions.IsAuthenticated] # Add IsOwnerOrAssociatedDoctor later
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Users should only see/modify their own appointments
-        # TODO: Allow doctors to see/modify appointments they are part of
-        return Appointment.objects.filter(user=self.request.user)
+        user = self.request.user
+        # If user is a doctor, show appointments where they are the doctor
+        if hasattr(user, 'doctor_profile') and user.doctor_profile:
+            return Appointment.objects.filter(doctor=user.doctor_profile)
+        # Otherwise, show appointments where they are the patient
+        return Appointment.objects.filter(user=user)
 
     def perform_update(self, serializer):
         """Override to trigger notification on status change."""

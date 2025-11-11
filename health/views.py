@@ -27,7 +27,7 @@ class MedicalDocumentListCreateView(generics.ListCreateAPIView):
                 create_notification(
                     recipient=doctor_user,
                     actor=patient,
-                    verb=f"Patient {patient.first_name} {patient.last_name} uploaded a document ('{document.filename or 'document'}') for appointment on {document.appointment.date.strftime('%b %d')}.",
+                    verb=f"Patient {patient.first_name} {patient.last_name} uploaded a document ('{document.file.name or 'document'}') for appointment on {document.appointment.date.strftime('%b %d')}.",
                     level='info',
                     target_url=f"/portal/appointments/{document.appointment.id}/documents/"
                 )

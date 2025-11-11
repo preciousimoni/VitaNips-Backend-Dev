@@ -24,6 +24,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class PharmacyDetailView(generics.RetrieveAPIView):
+    queryset = Pharmacy.objects.all()
+    serializer_class = PharmacySerializer
+    permission_classes = [permissions.AllowAny]
+
+
 class PharmacyListView(generics.ListAPIView):
     serializer_class = PharmacySerializer
     permission_classes = [permissions.AllowAny]

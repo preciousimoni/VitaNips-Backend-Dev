@@ -80,21 +80,14 @@ class PharmacyOrderItemViewSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 class MedicationOrderItemSerializer(serializers.ModelSerializer):
-    medication_name = serializers.ReadOnlyField(source='medication_name_text')
-    dosage = serializers.ReadOnlyField(source='dosage_text')
-    prescription_item_details = serializers.SerializerMethodField()
 
     class Meta:
         model = MedicationOrderItem
-        fields = ['id', 'order', 'prescription_item', 'prescription_item_details', 'medication_name', 'dosage', 'quantity', 'price_per_unit', 'total_price']
-        read_only_fields = ['total_price', 'order', 'medication_name', 'dosage', 'prescription_item_details']
-
-    def get_prescription_item_details(self, obj):
-        if obj.prescription_item:
-            # Import here to avoid circular import; use PrescriptionItemSerializer
-            from doctors.serializers import PrescriptionItemSerializer
-            return PrescriptionItemSerializer(obj.prescription_item).data
-        return None
+        fields = ['id', 'prescription_item', 'quantity', 'price_per_unit', 'total_price']
+        read_only_fields = ['id', 'price_per_unit', 'total_price']
+        extra_kwargs = {
+            'prescription_item': {'required': True}
+        }
 
 
 class PharmacyOrderListSerializer(serializers.ModelSerializer):
@@ -126,18 +119,28 @@ class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
         ]
 
 class MedicationOrderSerializer(serializers.ModelSerializer):
-    items = MedicationOrderItemSerializer(many=True, read_only=True)
-    pharmacy = PharmacySerializer(read_only=True)
+    items = MedicationOrderItemSerializer(many=True)
+    pharmacy_details = PharmacySerializer(source='pharmacy', read_only=True)
+    pharmacy = serializers.PrimaryKeyRelatedField(
+        queryset=Pharmacy.objects.all(), write_only=True
+    )
     user = UserSerializer(read_only=True)
 
     class Meta:
         model = MedicationOrder
         fields = [
-            'id', 'user', 'pharmacy', 'prescription', 'status', 'is_delivery',
+            'id', 'user', 'pharmacy', 'pharmacy_details', 'prescription', 'status', 'is_delivery',
             'delivery_address', 'total_amount', 'order_date',
             'pickup_or_delivery_date', 'notes', 'items'
         ]
-        read_only_fields = ['user', 'order_date', 'items', 'status', 'total_amount']
+        read_only_fields = ['user', 'order_date', 'status', 'total_amount']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items')
+        order = MedicationOrder.objects.create(**validated_data)
+        for item_data in items_data:
+            MedicationOrderItem.objects.create(order=order, **item_data)
+        return order
 
 
 class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
