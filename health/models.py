@@ -156,6 +156,19 @@ class MedicalDocument(models.Model):
     description = models.CharField( max_length=255, null=True, blank=True, help_text="Brief description or title of the document.")
     document_type = models.CharField(max_length=50, null=True, blank=True, help_text="e.g., Lab Result, Scan, Report, Prescription Image")
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    file_size = models.IntegerField(null=True, blank=True, help_text="Size in bytes")
+    mime_type = models.CharField(max_length=100, null=True, blank=True)
+    thumbnail = models.ImageField(upload_to='thumbnails/', null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    is_shared = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if self.file:
+            try:
+                self.file_size = self.file.size
+            except:
+                pass
+        super().save(*args, **kwargs)
 
     def __str__(self):
         filename = 'Unknown File'

@@ -9,6 +9,10 @@ from .views import (
     HealthGoalListCreateView, HealthGoalDetailView,
     MedicalDocumentListCreateView, MedicalDocumentDetailView,
 )
+from .sharing_views import (
+    DocumentShareCreateView, SharedWithMeListView, 
+    DocumentShareListView, DocumentShareDeleteView
+)
 
 urlpatterns = [
     path('vital-signs/', VitalSignListCreateView.as_view(), name='vital-sign-list'),
@@ -23,6 +27,12 @@ urlpatterns = [
     path('sleep-logs/<int:pk>/', SleepLogDetailView.as_view(), name='sleep-log-detail'),
     path('health-goals/', HealthGoalListCreateView.as_view(), name='health-goal-list'),
     path('health-goals/<int:pk>/', HealthGoalDetailView.as_view(), name='health-goal-detail'),
+    
+    # Documents
     path('documents/', MedicalDocumentListCreateView.as_view(), name='medical-document-list'),
     path('documents/<int:pk>/', MedicalDocumentDetailView.as_view(), name='medical-document-detail'),
+    path('documents/share/', DocumentShareCreateView.as_view(), name='document-share-create'),
+    path('documents/shared-with-me/', SharedWithMeListView.as_view(), name='shared-with-me-list'),
+    path('documents/<int:pk>/shared-with/', DocumentShareListView.as_view(), name='document-shared-with-list'),
+    path('documents/shares/<int:pk>/', DocumentShareDeleteView.as_view(), name='document-share-delete'),
 ]
