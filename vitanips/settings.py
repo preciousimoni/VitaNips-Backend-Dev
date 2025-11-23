@@ -163,32 +163,49 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# if DJANGO_ENV == 'development':
-#     STATIC_URL = '/static/'
-#     STATIC_ROOT = BASE_DIR / 'staticfiles'
-#     STATICFILES_DIRS = [BASE_DIR / 'static']
-#     MEDIA_URL = '/media/'
-#     MEDIA_ROOT = BASE_DIR / 'media'
-# else:
-#     STATIC_URL = '/static/'
-#     STATIC_ROOT = BASE_DIR / 'staticfiles'
-#     STATICFILES_DIRS = [BASE_DIR / 'static']
-#     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-#     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-#     AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
-#     AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-#     AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
-#     AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', default='us-east-2')
-#     AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
-#     AWS_DEFAULT_IMAGE_PATH = "media/defaults/default_product_image.jpg"
-
-#     AWS_QUERYSTRING_AUTH = False
-#     AWS_S3_FILE_OVERWRITE = False
-#     AWS_DEFAULT_ACL = 'public-read'
-#     AWS_S3_SIGNATURE_VERSION = 's3v4'
-#     AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
-#     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+# Storage Configuration
+# Use S3 if AWS_ACCESS_KEY_ID is set, otherwise use local file storage
+if config('AWS_ACCESS_KEY_ID', default=None):
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+            "OPTIONS": {
+                "access_key": config('AWS_ACCESS_KEY_ID'),
+                "secret_key": config('AWS_SECRET_ACCESS_KEY'),
+                "bucket_name": config('AWS_STORAGE_BUCKET_NAME'),
+                "region_name": config('AWS_S3_REGION_NAME', default='us-east-1'),
+                "custom_domain": f"{config('AWS_STORAGE_BUCKET_NAME')}.s3.amazonaws.com",
+                "default_acl": "private",  # Private by default for security
+                "file_overwrite": False,
+                "querystring_auth": True,  # Required for signed URLs
+                "signature_version": "s3v4",
+                "object_parameters": {
+                    "CacheControl": "max-age=86400",
+                },
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+    
+    # Legacy settings for django-storages < 4.2 (if needed, but STORAGES dict is modern way)
+    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
+    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='us-east-1')
+    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None # Use bucket default
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
+    
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+    
+else:
+    # Local Storage
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
