@@ -9,7 +9,7 @@ from .serializers import (
     ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer, MedicalDocumentSerializer,
     WaterIntakeLogSerializer, HealthInsightSerializer
 )
-from .permissions import IsOwnerOrAssociatedDoctorReadOnly
+from .permissions import IsOwnerOrSharedWith
 from .services import HealthAnalyticsService
 
 # ... (Previous views remain, I'll re-include them for completeness)
@@ -40,7 +40,7 @@ class MedicalDocumentListCreateView(generics.ListCreateAPIView):
 
 class MedicalDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MedicalDocumentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAssociatedDoctorReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrSharedWith]
 
     def get_queryset(self):
         return MedicalDocument.objects.filter(user=self.request.user)
