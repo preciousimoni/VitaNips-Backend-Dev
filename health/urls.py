@@ -14,6 +14,7 @@ from .sharing_views import (
     DocumentShareCreateView, SharedWithMeListView, 
     DocumentShareListView, DocumentShareDeleteView
 )
+from .analytics_views import HealthRecommendationsView, HealthTrendView
 
 urlpatterns = [
     path('vital-signs/', VitalSignListCreateView.as_view(), name='vital-sign-list'),
@@ -40,6 +41,10 @@ urlpatterns = [
     
     path('insights/', HealthInsightListView.as_view(), name='health-insight-list'),
     path('summary/weekly/', WeeklySummaryView.as_view(), name='weekly-summary'),
+    
+    # Analytics
+    path('recommendations/', HealthRecommendationsView.as_view(), name='health-recommendations'),
+    path('trends/<str:metric_type>/', HealthTrendView.as_view(), name='health-trends'),
     
     # Documents
     path('documents/', MedicalDocumentListCreateView.as_view(), name='medical-document-list'),
