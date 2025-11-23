@@ -1,6 +1,5 @@
-# health/serializers.py
 from rest_framework import serializers
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
+from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
 from users.serializers import UserSerializer
 
 class VitalSignSerializer(serializers.ModelSerializer):
@@ -9,7 +8,7 @@ class VitalSignSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'date_recorded', 'heart_rate', 'systolic_pressure',
             'diastolic_pressure', 'respiratory_rate', 'temperature', 'oxygen_saturation',
-            'blood_glucose', 'weight', 'notes', 'created_at'
+            'blood_glucose', 'weight', 'notes', 'source', 'created_at'
         ]
         read_only_fields = ['user', 'created_at']
 
@@ -36,7 +35,7 @@ class ExerciseLogSerializer(serializers.ModelSerializer):
         model = ExerciseLog
         fields = [
             'id', 'user', 'activity_type', 'datetime', 'duration',
-            'calories_burned', 'distance', 'notes', 'created_at'
+            'calories_burned', 'distance', 'intensity', 'heart_rate_avg', 'notes', 'created_at'
         ]
         read_only_fields = ['user', 'created_at']
 
@@ -47,20 +46,37 @@ class SleepLogSerializer(serializers.ModelSerializer):
         model = SleepLog
         fields = [
             'id', 'user', 'sleep_time', 'wake_time', 'quality',
-            'interruptions', 'notes', 'duration', 'created_at'
+            'interruptions', 'notes', 'source', 'duration', 'created_at'
         ]
         read_only_fields = ['user', 'created_at', 'duration']
+
+class WaterIntakeLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WaterIntakeLog
+        fields = [
+            'id', 'user', 'date', 'amount_ml', 'logged_at', 'daily_goal_ml'
+        ]
+        read_only_fields = ['user', 'logged_at']
 
 class HealthGoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = HealthGoal
         fields = [
-            'id', 'user', 'goal_type', 'custom_type', 'target_value', 'unit',
-            'start_date', 'target_date', 'status', 'progress', 'notes',
+            'id', 'user', 'goal_type', 'custom_type', 'target_value', 'current_value', 'unit',
+            'start_date', 'target_date', 'status', 'frequency', 'reminders_enabled', 'progress', 'notes',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
-        
+
+class HealthInsightSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HealthInsight
+        fields = [
+            'id', 'user', 'insight_type', 'title', 'description', 
+            'related_metric', 'is_read', 'priority', 'generated_at', 'expires_at'
+        ]
+        read_only_fields = ['user', 'generated_at']
+
 class MedicalDocumentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     filename = serializers.SerializerMethodField()

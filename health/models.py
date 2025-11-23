@@ -1,8 +1,8 @@
-# health/models.py
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+from datetime import timedelta
 from doctors.models import Appointment
-
 
 class VitalSign(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='vital_signs')
@@ -19,11 +19,11 @@ class VitalSign(models.Model):
     weight = models.FloatField(null=True, blank=True)  # kg
 
     notes = models.TextField(blank=True, null=True)
+    source = models.CharField(max_length=50, default='manual', choices=[('manual', 'Manual'), ('device', 'Device'), ('wearable', 'Wearable')])
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.user.email} - {self.date_recorded}"
-
 
 class SymptomLog(models.Model):
     SEVERITY_CHOICES = (
@@ -45,7 +45,6 @@ class SymptomLog(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.symptom} - {self.date_experienced}"
-
 
 class FoodLog(models.Model):
     MEAL_CHOICES = (
@@ -70,20 +69,26 @@ class FoodLog(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.food_item} - {self.datetime}"
 
-
 class ExerciseLog(models.Model):
+    INTENSITY_CHOICES = (
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+    )
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='exercise_logs')
     activity_type = models.CharField(max_length=100)
     datetime = models.DateTimeField()
     duration = models.IntegerField()  # minutes
     calories_burned = models.IntegerField(null=True, blank=True)
     distance = models.FloatField(null=True, blank=True)  # kilometers
+    intensity = models.CharField(max_length=10, choices=INTENSITY_CHOICES, default='medium')
+    heart_rate_avg = models.IntegerField(null=True, blank=True)
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.user.email} - {self.activity_type} - {self.datetime}"
-
 
 class SleepLog(models.Model):
     QUALITY_CHOICES = (
@@ -91,6 +96,7 @@ class SleepLog(models.Model):
         (2, 'Fair'),
         (3, 'Good'),
         (4, 'Excellent'),
+        (5, 'Perfect'), # Added 5 to match user request 1-5
     )
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sleep_logs')
@@ -99,6 +105,7 @@ class SleepLog(models.Model):
     quality = models.IntegerField(choices=QUALITY_CHOICES)
     interruptions = models.IntegerField(default=0)
     notes = models.TextField(blank=True, null=True)
+    source = models.CharField(max_length=50, default='manual', choices=[('manual', 'Manual'), ('device', 'Device')])
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -110,6 +117,15 @@ class SleepLog(models.Model):
         delta = self.wake_time - self.sleep_time
         return delta.total_seconds() / 3600
 
+class WaterIntakeLog(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='water_logs')
+    date = models.DateField(default=timezone.now)
+    amount_ml = models.IntegerField()
+    logged_at = models.DateTimeField(auto_now_add=True)
+    daily_goal_ml = models.IntegerField(default=2000)
+
+    def __str__(self):
+        return f"{self.user.email} - {self.amount_ml}ml - {self.date}"
 
 class HealthGoal(models.Model):
     TYPE_CHOICES = (
@@ -127,14 +143,23 @@ class HealthGoal(models.Model):
         ('abandoned', 'Abandoned'),
     )
 
+    FREQUENCY_CHOICES = (
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+    )
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='health_goals')
     goal_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     custom_type = models.CharField(max_length=100, blank=True, null=True)  # For 'custom' type
     target_value = models.FloatField()
+    current_value = models.FloatField(default=0.0)
     unit = models.CharField(max_length=50)  # e.g., "kg", "steps", "minutes"
     start_date = models.DateField()
     target_date = models.DateField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default='daily')
+    reminders_enabled = models.BooleanField(default=True)
     progress = models.FloatField(default=0.0)  # Percentage of completion
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -143,10 +168,38 @@ class HealthGoal(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.get_goal_type_display()} - {self.target_value} {self.unit}"
 
+class HealthInsight(models.Model):
+    TYPE_CHOICES = (
+        ('trend', 'Trend'),
+        ('warning', 'Warning'),
+        ('achievement', 'Achievement'),
+        ('recommendation', 'Recommendation'),
+    )
+    
+    PRIORITY_CHOICES = (
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+    )
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='health_insights')
+    insight_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    related_metric = models.CharField(max_length=50, blank=True, null=True) # e.g. 'blood_pressure', 'exercise'
+    is_read = models.BooleanField(default=False)
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f"{self.user.email} - {self.title}"
 
 def user_directory_path(instance, filename):
     return f'user_{instance.uploaded_by.id}/documents/{filename}'
-
 
 class MedicalDocument(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='medical_documents', help_text="The patient this document belongs to.")

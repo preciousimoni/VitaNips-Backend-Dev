@@ -1,12 +1,18 @@
-# health/views.py
-from rest_framework import generics, permissions
+from rest_framework import generics, permissions, views
+from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters
 from notifications.utils import create_notification
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
+from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
 from .serializers import (
     VitalSignSerializer, SymptomLogSerializer, FoodLogSerializer,
-    ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer, MedicalDocumentSerializer
+    ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer, MedicalDocumentSerializer,
+    WaterIntakeLogSerializer, HealthInsightSerializer
 )
 from .permissions import IsOwnerOrAssociatedDoctorReadOnly
+from .services import HealthAnalyticsService
+
+# ... (Previous views remain, I'll re-include them for completeness)
 
 class MedicalDocumentListCreateView(generics.ListCreateAPIView):
     serializer_class = MedicalDocumentSerializer
@@ -31,7 +37,6 @@ class MedicalDocumentListCreateView(generics.ListCreateAPIView):
                     level='info',
                     target_url=f"/portal/appointments/{document.appointment.id}/documents/"
                 )
-                print(f"Document upload notification created for doctor {doctor_user.id} for document {document.id}")
 
 class MedicalDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MedicalDocumentSerializer
@@ -43,6 +48,12 @@ class MedicalDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
 class VitalSignListCreateView(generics.ListCreateAPIView):
     serializer_class = VitalSignSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {
+        'date_recorded': ['gte', 'lte'],
+    }
+    ordering_fields = ['date_recorded']
+    ordering = ['-date_recorded']
 
     def get_queryset(self):
         return VitalSign.objects.filter(user=self.request.user)
@@ -56,6 +67,13 @@ class VitalSignDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return VitalSign.objects.filter(user=self.request.user)
+
+class VitalSignLatestView(generics.RetrieveAPIView):
+    serializer_class = VitalSignSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return VitalSign.objects.filter(user=self.request.user).order_by('-date_recorded').first()
 
 class SymptomLogListCreateView(generics.ListCreateAPIView):
     serializer_class = SymptomLogSerializer
@@ -94,6 +112,11 @@ class FoodLogDetailView(generics.RetrieveUpdateDestroyAPIView):
 class ExerciseLogListCreateView(generics.ListCreateAPIView):
     serializer_class = ExerciseLogSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {
+        'datetime': ['gte', 'lte'],
+    }
+    ordering = ['-datetime']
 
     def get_queryset(self):
         return ExerciseLog.objects.filter(user=self.request.user)
@@ -111,6 +134,11 @@ class ExerciseLogDetailView(generics.RetrieveUpdateDestroyAPIView):
 class SleepLogListCreateView(generics.ListCreateAPIView):
     serializer_class = SleepLogSerializer
     permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = {
+        'sleep_time': ['gte', 'lte'],
+    }
+    ordering = ['-sleep_time']
 
     def get_queryset(self):
         return SleepLog.objects.filter(user=self.request.user)
@@ -141,3 +169,38 @@ class HealthGoalDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return HealthGoal.objects.filter(user=self.request.user)
+
+class WaterIntakeLogListCreateView(generics.ListCreateAPIView):
+    serializer_class = WaterIntakeLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return WaterIntakeLog.objects.filter(user=self.request.user).order_by('-date')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class WaterIntakeTodayView(generics.RetrieveAPIView):
+    serializer_class = WaterIntakeLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        from django.utils import timezone
+        return WaterIntakeLog.objects.filter(
+            user=self.request.user, 
+            date=timezone.now().date()
+        ).first()
+
+class HealthInsightListView(generics.ListAPIView):
+    serializer_class = HealthInsightSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return HealthInsight.objects.filter(user=self.request.user)
+
+class WeeklySummaryView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        summary = HealthAnalyticsService.generate_weekly_summary(request.user)
+        return Response(summary)
