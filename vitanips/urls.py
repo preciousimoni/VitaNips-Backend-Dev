@@ -10,6 +10,8 @@ from drf_spectacular.views import (
     SpectacularRedocView,
 )
 
+from users.views import UserRegistrationView
+
 app_name = 'vitanips'
 
 urlpatterns = [
@@ -21,6 +23,8 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # Authentication endpoints
+    path('api/auth/', include('dj_rest_auth.urls')),
+    path('api/auth/register/', UserRegistrationView.as_view(), name='auth_register'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     

@@ -27,6 +27,7 @@ CSRF_TRUSTED_ORIGINS = ['https://vitanips.onrender.com']
 
 # Application definition
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -41,6 +42,7 @@ INSTALLED_APPS = [
     'django_filters',
     'corsheaders',
     'storages',
+    'channels',
     'twilio',
     'push_notifications',
     'rest_framework_simplejwt',
@@ -95,6 +97,17 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'vitanips.wsgi.application'
+ASGI_APPLICATION = 'vitanips.asgi.application'
+
+# Channels / Redis Configuration
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(config('REDIS_HOST', default='localhost'), config('REDIS_PORT', default=6379, cast=int))],
+        },
+    },
+}
 
 # Database
 DJANGO_ENV = config('DJANGO_ENV', default='development')

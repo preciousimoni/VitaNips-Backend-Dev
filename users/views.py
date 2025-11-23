@@ -7,6 +7,9 @@ from .serializers import (
     MedicalHistorySerializer, VaccinationSerializer
 )
 from .models import MedicalHistory, Vaccination
+from emergency.models import EmergencyContact
+from emergency.serializers import EmergencyContactSerializer
+from .permissions import IsOwner
 
 User = get_user_model()
 
@@ -66,3 +69,20 @@ class VaccinationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return Vaccination.objects.filter(user=self.request.user)
+
+class EmergencyContactListCreateView(generics.ListCreateAPIView):
+    serializer_class = EmergencyContactSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return EmergencyContact.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class EmergencyContactDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = EmergencyContactSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwner]
+
+    def get_queryset(self):
+        return EmergencyContact.objects.filter(user=self.request.user)

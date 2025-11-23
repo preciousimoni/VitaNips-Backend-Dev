@@ -73,10 +73,15 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['email', 'username', 'password',
-                  'password2', 'first_name', 'last_name']
+        fields = ['email', 'username', 'password', 'password2', 'first_name', 'last_name',
+                  'phone_number', 'date_of_birth', 'blood_group', 'genotype', 'allergies']
         extra_kwargs = {
-            'password': {'write_only': True}
+            'password': {'write_only': True},
+            'phone_number': {'required': False},
+            'date_of_birth': {'required': False},
+            'blood_group': {'required': False},
+            'genotype': {'required': False},
+            'allergies': {'required': False},
         }
 
     def validate(self, data):
