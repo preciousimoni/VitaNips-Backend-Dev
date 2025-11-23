@@ -2,7 +2,8 @@
 from rest_framework import serializers
 from .models import (
     Pharmacy, Medication, PharmacyInventory,
-    MedicationOrder, MedicationOrderItem, MedicationReminder
+    MedicationOrder, MedicationOrderItem, MedicationReminder,
+    MedicationLog
 )
 from users.serializers import UserSerializer
 from django.contrib.gis.geos import Point
@@ -197,3 +198,14 @@ class MedicationReminderSerializer(serializers.ModelSerializer):
         if not data.get('medication') and not data.get('medication_name_input'):
             raise serializers.ValidationError("Either medication_id or medication_name_input is required.")
         return data
+
+class MedicationLogSerializer(serializers.ModelSerializer):
+    medication_name = serializers.CharField(source='reminder.medication.name', read_only=True)
+    
+    class Meta:
+        model = MedicationLog
+        fields = [
+            'id', 'reminder', 'medication_name', 'scheduled_time', 
+            'taken_at', 'status', 'notes', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']

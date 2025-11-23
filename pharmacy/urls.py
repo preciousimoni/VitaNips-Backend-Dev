@@ -4,7 +4,8 @@ from .views import (
     PharmacyListView, PharmacyOrderListView, PharmacyOrderDetailView,
     MedicationListView, PharmacyInventoryListView, MedicationOrderListCreateView,
     MedicationOrderDetailView,  MedicationReminderListCreateView, MedicationReminderDetailView,
-    CreateOrderFromPrescriptionView, PharmacyDetailView
+    CreateOrderFromPrescriptionView, PharmacyDetailView,
+    MedicationLogListCreateView, LogMedicationIntakeView
 )
 
 urlpatterns = [
@@ -19,4 +20,6 @@ urlpatterns = [
     path('orders/<int:pk>/', MedicationOrderDetailView.as_view(), name='medication-order-detail'),
     path('reminders/', MedicationReminderListCreateView.as_view(), name='medication-reminder-list'),
     path('reminders/<int:pk>/', MedicationReminderDetailView.as_view(), name='medication-reminder-detail'),
+    path('logs/', MedicationLogListCreateView.as_view(), name='medication-log-list'),
+    path('reminders/<int:reminder_id>/log/', LogMedicationIntakeView.as_view(), name='medication-log-intake'),
 ]

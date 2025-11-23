@@ -118,5 +118,23 @@ class MedicationReminder(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+class MedicationLog(models.Model):
+    STATUS_CHOICES = (
+        ('taken', 'Taken'),
+        ('missed', 'Missed'),
+        ('skipped', 'Skipped'),
+    )
+
+    reminder = models.ForeignKey(MedicationReminder, on_delete=models.CASCADE, related_name='logs')
+    scheduled_time = models.DateTimeField()
+    taken_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='taken')
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     def __str__(self):
-        return f"{self.user.email} - {self.medication.name} - {self.time_of_day}"
+        return f"{self.reminder.medication.name} - {self.status} at {self.taken_at or self.scheduled_time}"
+
+    class Meta:
+        ordering = ['-scheduled_time']

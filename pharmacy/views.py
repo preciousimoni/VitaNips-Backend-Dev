@@ -4,12 +4,13 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.serializers import ValidationError
 from rest_framework.response import Response
 from notifications.utils import create_notification
-from pharmacy.models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
+from pharmacy.models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder, MedicationLog
 from pharmacy.serializers import (
     PharmacySerializer, PharmacyOrderListSerializer,
     PharmacyOrderDetailSerializer, PharmacyOrderUpdateSerializer,
     MedicationSerializer, PharmacyInventorySerializer,
-    MedicationOrderSerializer, MedicationReminderSerializer
+    MedicationOrderSerializer, MedicationReminderSerializer,
+    MedicationLogSerializer
 )
 from .permissions import IsPharmacyStaffOfOrderPharmacy
 from doctors.models import Prescription, PrescriptionItem, Appointment
@@ -348,3 +349,47 @@ class MedicationReminderDetailView(generics.RetrieveUpdateDestroyAPIView):
             serializer.save(medication=medication_instance)
         else:
             serializer.save()
+
+class MedicationLogListCreateView(generics.ListCreateAPIView):
+    serializer_class = MedicationLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['status', 'reminder']
+    ordering_fields = ['scheduled_time', 'taken_at']
+    ordering = ['-scheduled_time']
+
+    def get_queryset(self):
+        # Filter logs for reminders belonging to the current user
+        return MedicationLog.objects.filter(reminder__user=self.request.user)
+
+    def perform_create(self, serializer):
+        # Ensure the reminder belongs to the user
+        reminder = serializer.validated_data['reminder']
+        if reminder.user != self.request.user:
+            raise ValidationError("You cannot log intake for another user's reminder.")
+        serializer.save()
+
+class LogMedicationIntakeView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, reminder_id):
+        reminder = get_object_or_404(MedicationReminder, pk=reminder_id, user=request.user)
+        
+        status_value = request.data.get('status', 'taken')
+        taken_at = request.data.get('taken_at') # Optional override
+        notes = request.data.get('notes', '')
+        
+        if not taken_at and status_value == 'taken':
+            from django.utils import timezone
+            taken_at = timezone.now()
+            
+        # Create the log entry
+        log = MedicationLog.objects.create(
+            reminder=reminder,
+            scheduled_time=taken_at or timezone.now(), # Simplified logic; ideally match to next schedule
+            taken_at=taken_at,
+            status=status_value,
+            notes=notes
+        )
+        
+        return Response(MedicationLogSerializer(log).data, status=status.HTTP_201_CREATED)
