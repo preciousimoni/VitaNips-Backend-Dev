@@ -7,6 +7,8 @@ from django.utils import timezone
 
 User = get_user_model()
 
+from django.contrib.gis.geos import Point
+
 class Command(BaseCommand):
     help = 'Seeds the database with default users for testing (Patient, Doctor, Pharmacy Staff)'
 
@@ -14,7 +16,7 @@ class Command(BaseCommand):
         self.stdout.write('Seeding users...')
 
         # 1. Create Pharmacy (needed for Pharmacy Staff)
-        pharmacy, _ = Pharmacy.objects.get_or_create(
+        pharmacy, created = Pharmacy.objects.update_or_create(
             name="VitaCare Pharmacy",
             defaults={
                 'address': "123 Health St, Wellness City",
@@ -22,10 +24,14 @@ class Command(BaseCommand):
                 'email': "contact@vitacare.com",
                 'operating_hours': "9:00 AM - 9:00 PM",
                 'is_active': True,
-                'offers_delivery': True
+                'offers_delivery': True,
+                'location': Point(-73.935242, 40.730610) # Example: New York coordinates
             }
         )
-        self.stdout.write(f"Ensured Pharmacy: {pharmacy.name}")
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Created Pharmacy: {pharmacy.name}"))
+        else:
+            self.stdout.write(f"Updated Pharmacy: {pharmacy.name}")
 
         # Helper to create or get user
         def create_test_user(email, username, password, **kwargs):
