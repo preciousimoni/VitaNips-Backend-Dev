@@ -11,7 +11,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         email = 'admin@example.com'
         password = 'adminpassword'
-        username = 'admin'
+        username = 'admin'                                                                                                                              
         
         user = None
         # There might be a user with the email or the username, but not both.
