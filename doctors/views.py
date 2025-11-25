@@ -380,17 +380,16 @@ class DoctorPrescriptionViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def perform_create(self, serializer):
-        appointment = serializer.validated_data['appointment']
-        serializer.save(
-            doctor=self.request.user.doctor_profile,
-            user=appointment.user
-        )
+        # The serializer's create method already handles doctor and user
+        # We just need to create the notification after saving
+        prescription = serializer.save()
+        appointment = prescription.appointment
         patient = appointment.user
         create_notification(
             recipient=patient,
             actor=self.request.user,
             verb=f"Dr. {self.request.user.doctor_profile.last_name} has issued a new prescription for your appointment on {appointment.date.strftime('%b %d')}.",
             level='prescription',
-            target_url=f"/prescriptions/{serializer.instance.id}"
+            target_url=f"/prescriptions/{prescription.id}"
         )
-        print(f"New prescription notification created for user {patient.id} for prescription {serializer.instance.id}")
+        print(f"New prescription notification created for user {patient.id} for prescription {prescription.id}")

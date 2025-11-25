@@ -287,13 +287,13 @@ class CreateOrderFromPrescriptionView(views.APIView):
             user=request.user,
             pharmacy=pharmacy,
             prescription=prescription,
-            status=MedicationOrder.StatusChoices.PENDING, # Use choices constants
+            status='pending', # Default status for new orders
             # is_delivery, delivery_address, total_amount, notes would be set later by user/pharmacy
         )
 
-        order_items = []
+        # Create order items one by one to ensure IDs are set (bulk_create doesn't return IDs on all databases)
         for p_item in prescription_items:
-            order_item = MedicationOrderItem(
+            MedicationOrderItem.objects.create(
                 order=order,
                 prescription_item=p_item,
                 medication_name_text=p_item.medication_name,
@@ -301,13 +301,25 @@ class CreateOrderFromPrescriptionView(views.APIView):
                 quantity=1, # Default quantity, pharmacy might adjust
                 # price_per_unit will be filled by pharmacy later
             )
-            order_items.append(order_item)
 
-        MedicationOrderItem.objects.bulk_create(order_items)
+        # Refresh the order from database to ensure items are accessible
+        order.refresh_from_db()
+        
+        # Prefetch related items for serialization
+        order = MedicationOrder.objects.prefetch_related('items__prescription_item').get(pk=order.pk)
 
         # Serialize the newly created order
-        serializer = MedicationOrderSerializer(order)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            serializer = MedicationOrderSerializer(order)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error(f"Error serializing order {order.id}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return Response(
+                {"error": f"Order created successfully but failed to serialize: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class MedicationOrderListCreateView(generics.ListCreateAPIView):
     serializer_class = MedicationOrderSerializer

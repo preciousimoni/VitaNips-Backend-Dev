@@ -172,36 +172,45 @@ class DoctorPrescriptionCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop('items')
-        appointment = validated_data.get('appointment')
+        appointment = validated_data.pop('appointment')  # Remove from validated_data to avoid passing it twice
 
-        doctor = self.context['request'].user.doctor_profile
-        patient = appointment.user
+        # Get doctor and user from extra kwargs passed by perform_create, or fallback to context
+        doctor = validated_data.pop('doctor', None) or self.context['request'].user.doctor_profile
+        user = validated_data.pop('user', None) or appointment.user
 
-        prescription = Prescription.objects.create(
-            doctor=doctor,
-            user=patient,
-            **validated_data
-        )
-
-        for item_data in items_data:
-            medication_name = item_data.pop('medication_name_input')
-            medication_obj, _ = Medication.objects.get_or_create(
-                name__iexact=medication_name,
-                defaults={
-                    'name': medication_name,  # Add the name field explicitly
-                    'description': f'Medication: {medication_name}',
-                    'dosage_form': 'To be specified',
-                    'strength': item_data.get('dosage', 'To be specified'),
-                    'requires_prescription': True,
-                }
+        try:
+            prescription = Prescription.objects.create(
+                doctor=doctor,
+                user=user,
+                appointment=appointment,
+                **validated_data  # Now only contains diagnosis and notes
             )
-            PrescriptionItem.objects.create(
-                prescription=prescription, 
-                medication=medication_obj, 
-                medication_name=medication_name, 
-                **item_data
-            )
-        return prescription
+
+            for item_data in items_data:
+                medication_name = item_data.pop('medication_name_input')
+                # Try to find existing medication with case-insensitive match
+                medication_obj = Medication.objects.filter(name__iexact=medication_name).first()
+                if not medication_obj:
+                    # Create new medication if not found
+                    medication_obj = Medication.objects.create(
+                        name=medication_name,
+                        description=f'Medication: {medication_name}',
+                        dosage_form='To be specified',
+                        strength=item_data.get('dosage', 'To be specified'),
+                        requires_prescription=True,
+                    )
+                PrescriptionItem.objects.create(
+                    prescription=prescription, 
+                    medication=medication_obj, 
+                    medication_name=medication_name, 
+                    **item_data
+                )
+            return prescription
+        except Exception as e:
+            import traceback
+            print(f"Error creating prescription: {str(e)}")
+            print(traceback.format_exc())
+            raise serializers.ValidationError(f"Failed to create prescription: {str(e)}")
 
 class DoctorPrescriptionListDetailSerializer(serializers.ModelSerializer):
     items = DoctorPrescriptionItemDisplaySerializer(many=True, read_only=True)
