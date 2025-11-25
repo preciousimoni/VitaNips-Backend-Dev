@@ -190,7 +190,34 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         return Appointment.objects.filter(user=user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # Handle insurance if provided
+        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        user_insurance = None
+        if user_insurance_id:
+            from insurance.models import UserInsurance
+            try:
+                user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=self.request.user)
+            except UserInsurance.DoesNotExist:
+                pass  # Continue without insurance if invalid
+        
+        appointment = serializer.save(user=self.request.user, user_insurance=user_insurance)
+        
+        # Calculate insurance coverage if insurance is selected
+        if user_insurance and appointment.doctor.consultation_fee:
+            from insurance.utils import calculate_insurance_coverage
+            from decimal import Decimal
+            
+            consultation_fee = Decimal(str(appointment.doctor.consultation_fee))
+            coverage = calculate_insurance_coverage(
+                user_insurance,
+                consultation_fee,
+                service_type='consultation'
+            )
+            
+            appointment.consultation_fee = consultation_fee
+            appointment.insurance_covered_amount = coverage['covered_amount']
+            appointment.patient_copay = coverage['patient_copay']
+            appointment.save()
 
 class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AppointmentSerializer
@@ -205,9 +232,63 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Appointment.objects.filter(user=user)
 
     def perform_update(self, serializer):
-        """Override to trigger notification on status change."""
+        """Override to trigger notification on status change and handle insurance."""
         old_instance = self.get_object()
-        new_instance = serializer.save()
+        
+        # Handle insurance if being updated
+        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        user_insurance = old_instance.user_insurance  # Keep existing if not updating
+        
+        if user_insurance_id is not None:  # Explicitly set (could be None to remove)
+            from insurance.models import UserInsurance
+            from insurance.utils import calculate_insurance_coverage
+            from decimal import Decimal
+            
+            if user_insurance_id:
+                try:
+                    user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=self.request.user)
+                except UserInsurance.DoesNotExist:
+                    pass  # Keep existing insurance if invalid
+            else:
+                user_insurance = None  # Remove insurance
+        
+        # Calculate insurance coverage if insurance is set
+        if user_insurance:
+            consultation_fee = old_instance.doctor.consultation_fee if old_instance.doctor.consultation_fee else Decimal('0.00')
+            
+            if consultation_fee > 0:
+                coverage = calculate_insurance_coverage(
+                    user_insurance,
+                    consultation_fee,
+                    service_type='consultation'
+                )
+                serializer.validated_data['consultation_fee'] = consultation_fee
+                serializer.validated_data['insurance_covered_amount'] = coverage['covered_amount']
+                serializer.validated_data['patient_copay'] = coverage['patient_copay']
+        
+        new_instance = serializer.save(user_insurance=user_insurance)
+        
+        # Generate insurance claim automatically when appointment is completed
+        if old_instance.status != new_instance.status and new_instance.status == 'completed':
+            if new_instance.user_insurance and new_instance.consultation_fee and not new_instance.insurance_claim_generated:
+                from insurance.utils import generate_insurance_claim
+                from django.utils import timezone
+                
+                try:
+                    claim = generate_insurance_claim(
+                        user_insurance=new_instance.user_insurance,
+                        service_type='consultation',
+                        service_date=new_instance.date,
+                        provider_name=f"Dr. {new_instance.doctor.full_name}",
+                        service_description=f"Consultation - {new_instance.reason}",
+                        claimed_amount=new_instance.consultation_fee,
+                        approved_amount=new_instance.insurance_covered_amount,
+                        patient_responsibility=new_instance.patient_copay,
+                    )
+                    new_instance.insurance_claim_generated = True
+                    new_instance.save()
+                except Exception as e:
+                    print(f"Error generating insurance claim: {e}")
 
         if old_instance.status != new_instance.status and new_instance.status == 'confirmed':
             patient = new_instance.user

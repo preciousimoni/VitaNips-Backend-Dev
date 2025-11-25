@@ -44,6 +44,7 @@ class UserSerializer(serializers.ModelSerializer):
             'notify_appointment_reminder_push', 'is_pharmacy_staff', 'works_at_pharmacy',
             'insurance_details', 'emergency_contacts', 'vaccinations',
             'is_doctor', 'doctor_id', 'is_staff', 'is_superuser', 'is_active', 'created_at', 'updated_at',
+            'registered_as_doctor',
             # 'doctor_profile_summary',
         ]
         read_only_fields = ['id', 'username', 'email',
@@ -70,11 +71,12 @@ class UserSerializer(serializers.ModelSerializer):
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password2 = serializers.CharField(
         style={'input_type': 'password'}, write_only=True)
+    is_doctor = serializers.BooleanField(write_only=True, required=False, default=False, help_text="Indicates if the user is registering as a doctor.")
 
     class Meta:
         model = User
         fields = ['email', 'username', 'password', 'password2', 'first_name', 'last_name',
-                  'phone_number', 'date_of_birth', 'blood_group', 'genotype', 'allergies']
+                  'phone_number', 'date_of_birth', 'blood_group', 'genotype', 'allergies', 'is_doctor']
         extra_kwargs = {
             'password': {'write_only': True},
             'phone_number': {'required': False},
@@ -93,8 +95,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password2')
         password = validated_data.pop('password')
+        is_doctor = validated_data.pop('is_doctor', False)
         user = User(**validated_data)
         user.set_password(password)
+        # Store the doctor registration intent
+        user.registered_as_doctor = is_doctor
         user.save()
         return user
 

@@ -112,18 +112,29 @@ class PharmacyOrderListSerializer(serializers.ModelSerializer):
 class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
     items = PharmacyOrderItemViewSerializer(many=True, read_only=True)
     user = UserSerializer(read_only=True)
+    user_insurance = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = MedicationOrder
         fields = [
             'id', 'user', 'pharmacy', 'prescription', 'status', 'is_delivery',
             'delivery_address', 'total_amount', 'order_date',
-            'pickup_or_delivery_date', 'notes', 'items'
+            'pickup_or_delivery_date', 'notes', 'items',
+            'user_insurance', 'insurance_covered_amount', 'patient_copay',
+            'insurance_claim_generated'
         ]
         read_only_fields = [
             'id', 'user', 'pharmacy', 'prescription', 'order_date',
-            'items', 'is_delivery', 'delivery_address', 'total_amount'
+            'items', 'is_delivery', 'delivery_address', 'total_amount',
+            'user_insurance', 'insurance_covered_amount', 'patient_copay',
+            'insurance_claim_generated'
         ]
+    
+    def get_user_insurance(self, obj):
+        if obj.user_insurance:
+            from insurance.serializers import UserInsuranceSerializer
+            return UserInsuranceSerializer(obj.user_insurance).data
+        return None
 
 class MedicationOrderSerializer(serializers.ModelSerializer):
     items = MedicationOrderItemSerializer(many=True)
@@ -132,15 +143,49 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
         queryset=Pharmacy.objects.all(), write_only=True
     )
     user = UserSerializer(read_only=True)
+    user_insurance_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="ID of the insurance plan to use for this order"
+    )
+    user_insurance = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = MedicationOrder
         fields = [
             'id', 'user', 'pharmacy', 'pharmacy_details', 'prescription', 'status', 'is_delivery',
             'delivery_address', 'total_amount', 'order_date',
-            'pickup_or_delivery_date', 'notes', 'items'
+            'pickup_or_delivery_date', 'notes', 'items',
+            'user_insurance', 'user_insurance_id', 'insurance_covered_amount',
+            'patient_copay', 'insurance_claim_generated'
         ]
-        read_only_fields = ['user', 'order_date', 'status', 'total_amount']
+        read_only_fields = [
+            'user', 'order_date', 'status', 'total_amount',
+            'user_insurance', 'insurance_covered_amount', 'patient_copay',
+            'insurance_claim_generated'
+        ]
+    
+    def validate_user_insurance_id(self, value):
+        """Validate that the insurance belongs to the requesting user."""
+        if value is None:
+            return value
+        
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            from insurance.models import UserInsurance
+            try:
+                insurance = UserInsurance.objects.get(id=value, user=request.user)
+                return value
+            except UserInsurance.DoesNotExist:
+                raise serializers.ValidationError("Insurance plan not found or does not belong to you.")
+        return value
+    
+    def get_user_insurance(self, obj):
+        if obj.user_insurance:
+            from insurance.serializers import UserInsuranceSerializer
+            return UserInsuranceSerializer(obj.user_insurance).data
+        return None
 
     def create(self, validated_data):
         items_data = validated_data.pop('items')
@@ -151,6 +196,7 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
 
 
 class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
+    user_insurance = serializers.SerializerMethodField(read_only=True)
     ALLOWED_STATUS_TRANSITIONS = {
         'pending': ['processing', 'cancelled'],
         'processing': ['ready', 'cancelled'],
@@ -160,7 +206,21 @@ class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MedicationOrder
-        fields = ['status', 'notes', 'pickup_or_delivery_date', 'total_amount']
+        fields = [
+            'status', 'notes', 'pickup_or_delivery_date', 'total_amount',
+            'user_insurance', 'insurance_covered_amount', 'patient_copay',
+            'insurance_claim_generated'
+        ]
+        read_only_fields = [
+            'user_insurance', 'insurance_covered_amount', 'patient_copay',
+            'insurance_claim_generated'
+        ]
+    
+    def get_user_insurance(self, obj):
+        if obj.user_insurance:
+            from insurance.serializers import UserInsuranceSerializer
+            return UserInsuranceSerializer(obj.user_insurance).data
+        return None
 
     def validate_status(self, value):
         if self.instance:

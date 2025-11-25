@@ -151,6 +151,13 @@ class AppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField(read_only=True)
     patient_email = serializers.EmailField(source='user.email', read_only=True)
     doctor_name = serializers.SerializerMethodField(read_only=True)
+    user_insurance_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="ID of the insurance plan to use for this appointment"
+    )
+    user_insurance = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = Appointment
@@ -158,9 +165,36 @@ class AppointmentSerializer(serializers.ModelSerializer):
             'id', 'user', 'doctor', 'date', 'start_time', 'end_time',
             'appointment_type', 'status', 'reason', 'notes', 'followup_required',
             'patient_name', 'patient_email', 'doctor_name',
+            'user_insurance', 'user_insurance_id', 'consultation_fee',
+            'insurance_covered_amount', 'patient_copay', 'insurance_claim_generated',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['user', 'patient_name', 'patient_email', 'doctor_name', 'created_at', 'updated_at']
+        read_only_fields = [
+            'user', 'patient_name', 'patient_email', 'doctor_name',
+            'user_insurance', 'consultation_fee', 'insurance_covered_amount',
+            'patient_copay', 'insurance_claim_generated', 'created_at', 'updated_at'
+        ]
+    
+    def validate_user_insurance_id(self, value):
+        """Validate that the insurance belongs to the requesting user."""
+        if value is None:
+            return value
+        
+        request = self.context.get('request')
+        if request and request.user and request.user.is_authenticated:
+            from insurance.models import UserInsurance
+            try:
+                insurance = UserInsurance.objects.get(id=value, user=request.user)
+                return value
+            except UserInsurance.DoesNotExist:
+                raise serializers.ValidationError("Insurance plan not found or does not belong to you.")
+        return value
+    
+    def get_user_insurance(self, obj):
+        if obj.user_insurance:
+            from insurance.serializers import UserInsuranceSerializer
+            return UserInsuranceSerializer(obj.user_insurance).data
+        return None
 
     def get_patient_name(self, obj):
         if obj.user:

@@ -34,6 +34,9 @@ class User(AbstractUser):
 
     is_pharmacy_staff = models.BooleanField(_("pharmacy staff status"), default=False, help_text=_("Designates whether the user can log into the pharmacy portal."),)
     works_at_pharmacy = models.ForeignKey('pharmacy.Pharmacy', on_delete=models.SET_NULL, null=True, blank=True, related_name='staff_members', help_text=_("The pharmacy this staff member belongs to."),)
+    
+    # Track if user registered with intent to be a doctor (even if they haven't submitted application yet)
+    registered_as_doctor = models.BooleanField(default=False, help_text=_("Indicates if the user registered with intent to be a doctor."),)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

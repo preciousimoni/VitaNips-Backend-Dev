@@ -72,6 +72,13 @@ class MedicationOrder(models.Model):
     is_delivery = models.BooleanField(default=False)
     delivery_address = models.TextField(blank=True, null=True)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    
+    # Insurance fields
+    user_insurance = models.ForeignKey('insurance.UserInsurance', on_delete=models.SET_NULL, null=True, blank=True, related_name='medication_orders', help_text="Insurance plan used for this order")
+    insurance_covered_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Amount covered by insurance")
+    patient_copay = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Patient's out-of-pocket amount")
+    insurance_claim_generated = models.BooleanField(default=False, help_text="Whether an insurance claim was automatically generated")
+    
     order_date = models.DateTimeField(auto_now_add=True)
     pickup_or_delivery_date = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, null=True)

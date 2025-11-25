@@ -1,6 +1,8 @@
 # doctors/models.py
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+from decimal import Decimal
 import uuid
 # from pharmacy.models import Medication
 
@@ -200,6 +202,14 @@ class Appointment(models.Model):
     reason = models.TextField()
     notes = models.TextField(blank=True, null=True)
     followup_required = models.BooleanField(default=False)
+    
+    # Insurance fields
+    user_insurance = models.ForeignKey('insurance.UserInsurance', on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments', help_text="Insurance plan used for this appointment")
+    consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total consultation fee")
+    insurance_covered_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Amount covered by insurance")
+    patient_copay = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Patient's out-of-pocket amount")
+    insurance_claim_generated = models.BooleanField(default=False, help_text="Whether an insurance claim was automatically generated")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

@@ -119,9 +119,53 @@ class PharmacyOrderDetailView(generics.RetrieveUpdateAPIView):
         return PharmacyOrderDetailSerializer
     
     def perform_update(self, serializer):
-        """Override to trigger notification on status change by pharmacy."""
+        """Override to trigger notification on status change by pharmacy and handle insurance."""
         old_instance = self.get_object()
         new_instance = serializer.save()
+        
+        # Recalculate insurance if total_amount is updated
+        if new_instance.user_insurance and new_instance.total_amount:
+            from insurance.utils import calculate_insurance_coverage
+            from decimal import Decimal
+            
+            total_amount = Decimal(str(new_instance.total_amount))
+            coverage = calculate_insurance_coverage(
+                new_instance.user_insurance,
+                total_amount,
+                service_type='medication'
+            )
+            
+            new_instance.insurance_covered_amount = coverage['covered_amount']
+            new_instance.patient_copay = coverage['patient_copay']
+            new_instance.save()
+        
+        # Generate insurance claim automatically when order is completed
+        if old_instance.status != new_instance.status and new_instance.status == 'completed':
+            if new_instance.user_insurance and new_instance.total_amount and not new_instance.insurance_claim_generated:
+                from insurance.utils import generate_insurance_claim
+                from django.utils import timezone
+                
+                try:
+                    # Build service description from order items
+                    items_desc = ", ".join([
+                        f"{item.medication_name_text or 'Medication'} ({item.quantity}x)"
+                        for item in new_instance.items.all()
+                    ])
+                    
+                    claim = generate_insurance_claim(
+                        user_insurance=new_instance.user_insurance,
+                        service_type='medication',
+                        service_date=new_instance.order_date.date(),
+                        provider_name=new_instance.pharmacy.name,
+                        service_description=f"Medication Order: {items_desc}",
+                        claimed_amount=new_instance.total_amount,
+                        approved_amount=new_instance.insurance_covered_amount,
+                        patient_responsibility=new_instance.patient_copay,
+                    )
+                    new_instance.insurance_claim_generated = True
+                    new_instance.save()
+                except Exception as e:
+                    print(f"Error generating insurance claim for order {new_instance.id}: {e}")
 
         if old_instance.status != new_instance.status and new_instance.status == 'ready':
             patient = new_instance.user
@@ -224,13 +268,23 @@ class CreateOrderFromPrescriptionView(views.APIView):
         # --- End Validation 2 ---
 
 
-        # Fetch Pharmacy ID from request body
+        # Fetch Pharmacy ID and Insurance from request body
         pharmacy_id = request.data.get('pharmacy_id')
         if not pharmacy_id:
             return Response(
                 {"error": "pharmacy_id is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # Handle Insurance if provided
+        user_insurance = None
+        user_insurance_id = request.data.get('user_insurance_id')
+        if user_insurance_id:
+            from insurance.models import UserInsurance
+            try:
+                user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=request.user)
+            except UserInsurance.DoesNotExist:
+                pass  # Continue without insurance if invalid
 
         # Fetch Pharmacy
         try:
@@ -282,12 +336,23 @@ class CreateOrderFromPrescriptionView(views.APIView):
         # --- End Validation 5 ---
 
 
+        # --- Handle Insurance if provided ---
+        user_insurance = None
+        user_insurance_id = request.data.get('user_insurance_id')
+        if user_insurance_id:
+            from insurance.models import UserInsurance
+            try:
+                user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=request.user)
+            except UserInsurance.DoesNotExist:
+                pass  # Continue without insurance if invalid
+        
         # --- Create Order and Items (If all validations pass) ---
         order = MedicationOrder.objects.create(
             user=request.user,
             pharmacy=pharmacy,
             prescription=prescription,
             status='pending', # Default status for new orders
+            user_insurance=user_insurance,
             # is_delivery, delivery_address, total_amount, notes would be set later by user/pharmacy
         )
 
@@ -329,7 +394,33 @@ class MedicationOrderListCreateView(generics.ListCreateAPIView):
         return MedicationOrder.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        # Handle insurance if provided
+        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        user_insurance = None
+        if user_insurance_id:
+            from insurance.models import UserInsurance
+            try:
+                user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=self.request.user)
+            except UserInsurance.DoesNotExist:
+                pass  # Continue without insurance if invalid
+        
+        order = serializer.save(user=self.request.user, user_insurance=user_insurance)
+        
+        # Calculate insurance coverage if insurance is selected and total_amount is set
+        if user_insurance and order.total_amount:
+            from insurance.utils import calculate_insurance_coverage
+            from decimal import Decimal
+            
+            total_amount = Decimal(str(order.total_amount))
+            coverage = calculate_insurance_coverage(
+                user_insurance,
+                total_amount,
+                service_type='medication'
+            )
+            
+            order.insurance_covered_amount = coverage['covered_amount']
+            order.patient_copay = coverage['patient_copay']
+            order.save()
 
 class MedicationOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MedicationOrderSerializer
@@ -337,6 +428,70 @@ class MedicationOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return MedicationOrder.objects.filter(user=self.request.user)
+    
+    def perform_update(self, serializer):
+        """Override to handle insurance calculation and claim generation."""
+        old_instance = self.get_object()
+        
+        # Handle insurance if being updated
+        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        user_insurance = old_instance.user_insurance  # Keep existing if not updating
+        
+        if user_insurance_id is not None:  # Explicitly set (could be None to remove)
+            from insurance.models import UserInsurance
+            if user_insurance_id:
+                try:
+                    user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=self.request.user)
+                except UserInsurance.DoesNotExist:
+                    pass  # Keep existing insurance if invalid
+            else:
+                user_insurance = None  # Remove insurance
+        
+        new_instance = serializer.save(user_insurance=user_insurance)
+        
+        # Recalculate insurance if total_amount is set and insurance exists
+        if user_insurance and new_instance.total_amount:
+            from insurance.utils import calculate_insurance_coverage
+            from decimal import Decimal
+            
+            total_amount = Decimal(str(new_instance.total_amount))
+            coverage = calculate_insurance_coverage(
+                user_insurance,
+                total_amount,
+                service_type='medication'
+            )
+            
+            new_instance.insurance_covered_amount = coverage['covered_amount']
+            new_instance.patient_copay = coverage['patient_copay']
+            new_instance.save()
+        
+        # Generate insurance claim automatically when order is completed
+        if old_instance.status != new_instance.status and new_instance.status == 'completed':
+            if new_instance.user_insurance and new_instance.total_amount and not new_instance.insurance_claim_generated:
+                from insurance.utils import generate_insurance_claim
+                from django.utils import timezone
+                
+                try:
+                    # Build service description from order items
+                    items_desc = ", ".join([
+                        f"{item.medication_name_text or 'Medication'} ({item.quantity}x)"
+                        for item in new_instance.items.all()
+                    ])
+                    
+                    claim = generate_insurance_claim(
+                        user_insurance=new_instance.user_insurance,
+                        service_type='medication',
+                        service_date=new_instance.order_date.date(),
+                        provider_name=new_instance.pharmacy.name,
+                        service_description=f"Medication Order: {items_desc}",
+                        claimed_amount=new_instance.total_amount,
+                        approved_amount=new_instance.insurance_covered_amount,
+                        patient_responsibility=new_instance.patient_copay,
+                    )
+                    new_instance.insurance_claim_generated = True
+                    new_instance.save()
+                except Exception as e:
+                    print(f"Error generating insurance claim for order {new_instance.id}: {e}")
 
 class MedicationReminderListCreateView(generics.ListCreateAPIView):
     serializer_class = MedicationReminderSerializer
