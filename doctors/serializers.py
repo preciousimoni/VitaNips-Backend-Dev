@@ -16,10 +16,83 @@ class DoctorUserSerializer(serializers.Serializer):
     username = serializers.CharField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
 
+class DoctorApplicationSerializer(serializers.ModelSerializer):
+    """Serializer for doctors to submit their application"""
+    specialty_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Specialty.objects.all(),
+        source='specialties',
+        write_only=True,
+        required=True,
+        help_text="List of specialty IDs"
+    )
+    specialties = SpecialtySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Doctor
+        fields = [
+            'id', 'first_name', 'last_name', 'specialty_ids', 'specialties',
+            'profile_picture', 'gender', 'years_of_experience', 'education',
+            'bio', 'languages_spoken', 'consultation_fee', 'is_available_for_virtual',
+            'license_number', 'license_issuing_authority', 'license_expiry_date',
+            'hospital_name', 'hospital_address', 'hospital_phone', 'hospital_email',
+            'hospital_contact_person', 'application_status', 'submitted_at',
+        ]
+        read_only_fields = ['id', 'application_status', 'submitted_at', 'specialties']
+
+    def validate_license_number(self, value):
+        if not value:
+            raise serializers.ValidationError("License number is required for application.")
+        return value
+
+    def validate_hospital_name(self, value):
+        if not value:
+            raise serializers.ValidationError("Hospital name is required for application.")
+        return value
+
+    def validate_hospital_phone(self, value):
+        if not value:
+            raise serializers.ValidationError("Hospital contact phone is required for application.")
+        return value
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        if not request or not request.user:
+            raise serializers.ValidationError("User must be authenticated to submit application.")
+        
+        specialties = validated_data.pop('specialties', [])
+        doctor = Doctor.objects.create(
+            user=request.user,
+            application_status='submitted',
+            **validated_data
+        )
+        doctor.specialties.set(specialties)
+        
+        # Set submitted_at timestamp
+        from django.utils import timezone
+        doctor.submitted_at = timezone.now()
+        doctor.save()
+        
+        return doctor
+
+    def update(self, instance, validated_data):
+        specialties = validated_data.pop('specialties', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        if specialties is not None:
+            instance.specialties.set(specialties)
+        
+        instance.save()
+        return instance
+
+
 class DoctorSerializer(serializers.ModelSerializer):
     specialties = SpecialtySerializer(many=True, read_only=True)
     average_rating = serializers.ReadOnlyField()
     user = DoctorUserSerializer(read_only=True)
+    reviewed_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Doctor
@@ -27,9 +100,21 @@ class DoctorSerializer(serializers.ModelSerializer):
             'id', 'user', 'first_name', 'last_name', 'full_name', 'specialties',
             'profile_picture', 'gender', 'years_of_experience', 'education',
             'bio', 'languages_spoken', 'consultation_fee', 'is_available_for_virtual',
-            'is_verified', 'average_rating', 'created_at', 'updated_at'
+            'is_verified', 'average_rating', 'application_status', 'license_number',
+            'license_issuing_authority', 'license_expiry_date', 'hospital_name',
+            'hospital_address', 'hospital_phone', 'hospital_email', 'hospital_contact_person',
+            'submitted_at', 'reviewed_at', 'reviewed_by', 'reviewed_by_name', 'review_notes', 'rejection_reason',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'full_name', 'average_rating']
+        read_only_fields = [
+            'created_at', 'updated_at', 'full_name', 'average_rating',
+            'reviewed_at', 'reviewed_by', 'is_verified', 'reviewed_by_name'
+        ]
+
+    def get_reviewed_by_name(self, obj):
+        if obj.reviewed_by:
+            return f"{obj.reviewed_by.first_name} {obj.reviewed_by.last_name}".strip() or obj.reviewed_by.username
+        return None
 
 class DoctorReviewSerializer(serializers.ModelSerializer):
     class Meta:

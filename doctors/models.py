@@ -20,6 +20,15 @@ class Doctor(models.Model):
         ('F', 'Female'),
     )
     
+    APPLICATION_STATUS_CHOICES = (
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted for Review'),
+        ('under_review', 'Under Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('needs_revision', 'Needs Revision'),
+    )
+    
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='doctor_profile', null=True, blank=True)
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
@@ -33,6 +42,88 @@ class Doctor(models.Model):
     consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     is_available_for_virtual = models.BooleanField(default=True)
     is_verified = models.BooleanField(default=False)
+    
+    # Application fields
+    application_status = models.CharField(
+        max_length=20,
+        choices=APPLICATION_STATUS_CHOICES,
+        default='draft',
+        help_text="Status of the doctor's application"
+    )
+    license_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Medical license number"
+    )
+    license_issuing_authority = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Authority that issued the license"
+    )
+    license_expiry_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text="License expiration date"
+    )
+    hospital_name = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Name of the hospital/clinic where the doctor works"
+    )
+    hospital_address = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Address of the hospital/clinic"
+    )
+    hospital_phone = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Hospital/clinic contact phone number"
+    )
+    hospital_email = models.EmailField(
+        blank=True,
+        null=True,
+        help_text="Hospital/clinic contact email"
+    )
+    hospital_contact_person = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Name of contact person at hospital"
+    )
+    submitted_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the application was submitted for review"
+    )
+    reviewed_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the application was last reviewed"
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_doctors',
+        help_text="Admin who reviewed the application"
+    )
+    review_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Admin review notes and comments"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Reason for rejection if application was rejected"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

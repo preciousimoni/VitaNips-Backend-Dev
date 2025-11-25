@@ -205,30 +205,135 @@ class AdminDoctorsListView(APIView):
 
 class AdminDoctorVerificationView(APIView):
     """
-    Verify or reject doctor applications
+    Comprehensive doctor application review and verification.
+    Supports: approve, reject, request revision, contact hospital
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def patch(self, request, doctor_id):
         try:
-            doctor = Doctor.objects.get(id=doctor_id)
-            is_verified = request.data.get('is_verified', None)
+            doctor = Doctor.objects.select_related('user', 'reviewed_by').get(id=doctor_id)
+            action = request.data.get('action')  # 'approve', 'reject', 'request_revision'
+            review_notes = request.data.get('review_notes', '')
+            rejection_reason = request.data.get('rejection_reason', '')
+            contact_hospital = request.data.get('contact_hospital', False)
             
-            if is_verified is not None:
-                doctor.is_verified = is_verified
+            from notifications.utils import create_notification
+            
+            if action == 'approve':
+                doctor.is_verified = True
+                doctor.application_status = 'approved'
+                doctor.reviewed_at = timezone.now()
+                doctor.reviewed_by = request.user
+                doctor.review_notes = review_notes
+                doctor.rejection_reason = None
                 doctor.save()
                 
-                # You could send notification to doctor here
+                # Notify doctor
+                if doctor.user:
+                    create_notification(
+                        recipient=doctor.user,
+                        actor=request.user,
+                        verb=f"Your doctor application has been approved! You can now start accepting appointments.",
+                        level='success',
+                        target_url=f"/doctor/dashboard"
+                    )
                 
                 return Response({
-                    'message': f'Doctor {"verified" if is_verified else "unverified"} successfully',
+                    'message': 'Doctor application approved successfully',
                     'doctor': DoctorSerializer(doctor).data
                 }, status=status.HTTP_200_OK)
             
-            return Response(
-                {'error': 'is_verified field is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            elif action == 'reject':
+                if not rejection_reason:
+                    return Response(
+                        {'error': 'rejection_reason is required when rejecting an application'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                doctor.is_verified = False
+                doctor.application_status = 'rejected'
+                doctor.reviewed_at = timezone.now()
+                doctor.reviewed_by = request.user
+                doctor.review_notes = review_notes
+                doctor.rejection_reason = rejection_reason
+                doctor.save()
+                
+                # Notify doctor
+                if doctor.user:
+                    create_notification(
+                        recipient=doctor.user,
+                        actor=request.user,
+                        verb=f"Your doctor application has been rejected. Reason: {rejection_reason}",
+                        level='error',
+                        target_url=f"/doctor/application"
+                    )
+                
+                return Response({
+                    'message': 'Doctor application rejected',
+                    'doctor': DoctorSerializer(doctor).data
+                }, status=status.HTTP_200_OK)
+            
+            elif action == 'request_revision':
+                doctor.application_status = 'needs_revision'
+                doctor.reviewed_at = timezone.now()
+                doctor.reviewed_by = request.user
+                doctor.review_notes = review_notes
+                doctor.rejection_reason = None
+                doctor.save()
+                
+                # Notify doctor
+                if doctor.user:
+                    create_notification(
+                        recipient=doctor.user,
+                        actor=request.user,
+                        verb=f"Your doctor application needs revision. Please review the admin notes and resubmit.",
+                        level='warning',
+                        target_url=f"/doctor/application"
+                    )
+                
+                return Response({
+                    'message': 'Revision requested from doctor',
+                    'doctor': DoctorSerializer(doctor).data
+                }, status=status.HTTP_200_OK)
+            
+            elif action == 'start_review':
+                doctor.application_status = 'under_review'
+                doctor.reviewed_by = request.user
+                doctor.save()
+                
+                return Response({
+                    'message': 'Review started',
+                    'doctor': DoctorSerializer(doctor).data
+                }, status=status.HTTP_200_OK)
+            
+            elif action == 'contact_hospital':
+                # This would typically trigger an email/SMS to the hospital
+                # For now, we'll just log it and return success
+                hospital_info = {
+                    'name': doctor.hospital_name,
+                    'phone': doctor.hospital_phone,
+                    'email': doctor.hospital_email,
+                    'contact_person': doctor.hospital_contact_person,
+                }
+                
+                # Add note about hospital contact
+                contact_note = f"\n[Hospital Contacted on {timezone.now().strftime('%Y-%m-%d %H:%M')}]"
+                doctor.review_notes = (doctor.review_notes or '') + contact_note
+                doctor.save()
+                
+                return Response({
+                    'message': 'Hospital contact information retrieved',
+                    'hospital_info': hospital_info,
+                    'note': 'In production, this would send an email/SMS to the hospital for verification'
+                }, status=status.HTTP_200_OK)
+            
+            else:
+                return Response(
+                    {'error': f'Invalid action. Must be one of: approve, reject, request_revision, start_review, contact_hospital'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
         except Doctor.DoesNotExist:
             return Response(
                 {'error': 'Doctor not found'},

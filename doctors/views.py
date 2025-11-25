@@ -14,7 +14,8 @@ from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appoint
 from .serializers import (
     SpecialtySerializer, DoctorSerializer, DoctorReviewSerializer,
     DoctorAvailabilitySerializer, AppointmentSerializer, PrescriptionSerializer,
-    DoctorPrescriptionCreateSerializer, DoctorPrescriptionListDetailSerializer,DoctorEligibleAppointmentSerializer
+    DoctorPrescriptionCreateSerializer, DoctorPrescriptionListDetailSerializer,
+    DoctorEligibleAppointmentSerializer, DoctorApplicationSerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,107 @@ class DoctorDetailView(generics.RetrieveAPIView):
     queryset = Doctor.objects.filter(is_verified=True)
     serializer_class = DoctorSerializer
     permission_classes = [permissions.AllowAny]
+
+class DoctorApplicationView(generics.CreateAPIView, generics.RetrieveUpdateAPIView):
+    """
+    View for doctors to submit and manage their application.
+    - POST: Submit new application
+    - GET: Retrieve their application status
+    - PATCH: Update application (only if status is 'draft' or 'needs_revision')
+    """
+    serializer_class = DoctorApplicationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        """Get the doctor profile for the authenticated user"""
+        if hasattr(self.request.user, 'doctor_profile') and self.request.user.doctor_profile:
+            return self.request.user.doctor_profile
+        return None
+
+    def get(self, request, *args, **kwargs):
+        """Retrieve doctor's application"""
+        doctor = self.get_object()
+        if not doctor:
+            return Response(
+                {'error': 'No doctor profile found. Please submit an application first.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = self.get_serializer(doctor)
+        return Response(serializer.data)
+
+    def post(self, request, *args, **kwargs):
+        """Submit new application"""
+        # Check if user already has a doctor profile
+        if hasattr(request.user, 'doctor_profile') and request.user.doctor_profile:
+            return Response(
+                {'error': 'You already have a doctor profile. Use PATCH to update your application.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        doctor = serializer.save()
+        
+        # Send notification to admins
+        from notifications.utils import create_notification
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        admins = User.objects.filter(is_staff=True, is_superuser=True)
+        for admin in admins:
+            create_notification(
+                recipient=admin,
+                actor=request.user,
+                verb=f"New doctor application submitted by Dr. {doctor.first_name} {doctor.last_name}",
+                level='admin',
+                target_url=f"/admin/doctors"
+            )
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def patch(self, request, *args, **kwargs):
+        """Update application (only if draft or needs_revision)"""
+        doctor = self.get_object()
+        if not doctor:
+            return Response(
+                {'error': 'No doctor profile found. Please submit an application first.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Only allow updates if status is draft or needs_revision
+        if doctor.application_status not in ['draft', 'needs_revision']:
+            return Response(
+                {'error': f'Cannot update application. Current status: {doctor.get_application_status_display()}. Only draft or needs_revision applications can be updated.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = self.get_serializer(doctor, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        
+        # If updating to submitted, set submitted_at
+        if serializer.validated_data.get('application_status') == 'submitted' or \
+           (not serializer.validated_data.get('application_status') and doctor.application_status == 'draft'):
+            from django.utils import timezone
+            doctor.submitted_at = timezone.now()
+            doctor.application_status = 'submitted'
+        
+        serializer.save()
+        
+        # Notify admins if status changed to submitted
+        if doctor.application_status == 'submitted':
+            from notifications.utils import create_notification
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            admins = User.objects.filter(is_staff=True, is_superuser=True)
+            for admin in admins:
+                create_notification(
+                    recipient=admin,
+                    actor=request.user,
+                    verb=f"Doctor application updated and resubmitted by Dr. {doctor.first_name} {doctor.last_name}",
+                    level='admin',
+                    target_url=f"/admin/doctors"
+                )
+        
+        return Response(serializer.data)
 
 class DoctorReviewListCreateView(generics.ListCreateAPIView):
     serializer_class = DoctorReviewSerializer
