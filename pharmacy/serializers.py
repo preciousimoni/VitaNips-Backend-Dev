@@ -67,11 +67,17 @@ class MedicationSerializer(serializers.ModelSerializer):
 
 class PharmacyInventorySerializer(serializers.ModelSerializer):
     medication = MedicationSerializer(read_only=True)
+    medication_id = serializers.PrimaryKeyRelatedField(
+        queryset=Medication.objects.all(),
+        source='medication',
+        write_only=True,
+        required=False
+    )
 
     class Meta:
         model = PharmacyInventory
-        fields = ['id', 'pharmacy', 'medication', 'in_stock', 'quantity', 'price', 'last_updated']
-        read_only_fields = ['last_updated']
+        fields = ['id', 'pharmacy', 'medication', 'medication_id', 'in_stock', 'quantity', 'price', 'last_updated']
+        read_only_fields = ['last_updated', 'pharmacy']
 
 
 class PharmacyOrderItemViewSerializer(serializers.ModelSerializer):

@@ -1,5 +1,6 @@
 # pharmacy/views.py
-from rest_framework import generics, permissions, filters, status, views
+from rest_framework import generics, permissions, filters, status, views, viewsets
+from rest_framework.routers import DefaultRouter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.serializers import ValidationError
 from rest_framework.response import Response
@@ -157,6 +158,33 @@ class PharmacyInventoryListView(generics.ListAPIView):
 
     def get_queryset(self):
         return PharmacyInventory.objects.filter(pharmacy_id=self.kwargs['pharmacy_id'], in_stock=True)
+
+
+class PharmacyInventoryPortalViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for pharmacy staff to manage their own pharmacy's inventory.
+    Only allows pharmacy staff to view/edit inventory for their assigned pharmacy.
+    """
+    serializer_class = PharmacyInventorySerializer
+    permission_classes = [permissions.IsAuthenticated, IsPharmacyStaffOfOrderPharmacy]
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    search_fields = ['medication__name', 'medication__generic_name']
+    filterset_fields = ['in_stock']
+
+    def get_queryset(self):
+        """Only return inventory for the authenticated pharmacy staff's pharmacy"""
+        user = self.request.user
+        if hasattr(user, 'works_at_pharmacy') and user.works_at_pharmacy:
+            return PharmacyInventory.objects.filter(pharmacy=user.works_at_pharmacy)
+        return PharmacyInventory.objects.none()
+
+    def perform_create(self, serializer):
+        """Automatically set the pharmacy to the authenticated user's pharmacy"""
+        user = self.request.user
+        if hasattr(user, 'works_at_pharmacy') and user.works_at_pharmacy:
+            serializer.save(pharmacy=user.works_at_pharmacy)
+        else:
+            raise permissions.PermissionDenied("You must be assigned to a pharmacy to manage inventory.")
 
 class CreateOrderFromPrescriptionView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]

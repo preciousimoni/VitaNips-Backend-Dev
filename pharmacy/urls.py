@@ -1,12 +1,17 @@
 # pharmacy/urls.py
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
     PharmacyListView, PharmacyOrderListView, PharmacyOrderDetailView,
     MedicationListView, PharmacyInventoryListView, MedicationOrderListCreateView,
     MedicationOrderDetailView,  MedicationReminderListCreateView, MedicationReminderDetailView,
     CreateOrderFromPrescriptionView, PharmacyDetailView,
-    MedicationLogListCreateView, LogMedicationIntakeView
+    MedicationLogListCreateView, LogMedicationIntakeView,
+    PharmacyInventoryPortalViewSet
 )
+
+router = DefaultRouter()
+router.register(r'portal/inventory', PharmacyInventoryPortalViewSet, basename='pharmacy-portal-inventory')
 
 urlpatterns = [
     path('', PharmacyListView.as_view(), name='pharmacy-list'),
@@ -22,4 +27,5 @@ urlpatterns = [
     path('reminders/<int:pk>/', MedicationReminderDetailView.as_view(), name='medication-reminder-detail'),
     path('logs/', MedicationLogListCreateView.as_view(), name='medication-log-list'),
     path('reminders/<int:reminder_id>/log/', LogMedicationIntakeView.as_view(), name='medication-log-intake'),
+    path('', include(router.urls)),  # Include router URLs for portal inventory
 ]
