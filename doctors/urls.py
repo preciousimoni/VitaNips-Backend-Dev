@@ -5,6 +5,7 @@ from django.conf.urls import include
 from .views import (
     SpecialtyListView, DoctorListView, DoctorDetailView,
     DoctorReviewListCreateView, DoctorAvailabilityListView,
+    DoctorAvailabilityManageViewSet,
     AppointmentListCreateView, AppointmentDetailView,
     PrescriptionListView, PrescriptionDetailView, ForwardPrescriptionView,
     GetTwilioTokenView, DoctorEligibleAppointmentListView,
@@ -17,6 +18,7 @@ from .video_views import (
 
 router = DefaultRouter()
 router.register(r'portal/prescriptions', DoctorPrescriptionViewSet, basename='doctor-portal-prescriptions')
+router.register(r'portal/availability', DoctorAvailabilityManageViewSet, basename='doctor-portal-availability')
 
 
 urlpatterns = [

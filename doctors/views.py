@@ -54,6 +54,27 @@ class DoctorAvailabilityListView(generics.ListAPIView):
     def get_queryset(self):
         return DoctorAvailability.objects.filter(doctor_id=self.kwargs['doctor_id'], is_available=True)
 
+class DoctorAvailabilityManageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for doctors to manage their own availability.
+    Only allows doctors to view/edit their own availability.
+    """
+    serializer_class = DoctorAvailabilitySerializer
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+
+    def get_queryset(self):
+        """Only return availability for the authenticated doctor"""
+        if hasattr(self.request.user, 'doctor_profile') and self.request.user.doctor_profile:
+            return DoctorAvailability.objects.filter(doctor=self.request.user.doctor_profile)
+        return DoctorAvailability.objects.none()
+
+    def perform_create(self, serializer):
+        """Automatically set the doctor to the authenticated user's doctor profile"""
+        if hasattr(self.request.user, 'doctor_profile') and self.request.user.doctor_profile:
+            serializer.save(doctor=self.request.user.doctor_profile)
+        else:
+            raise permissions.PermissionDenied("You must be a doctor to manage availability.")
+
 class AppointmentListCreateView(generics.ListCreateAPIView):
     serializer_class = AppointmentSerializer
     permission_classes = [permissions.IsAuthenticated]
