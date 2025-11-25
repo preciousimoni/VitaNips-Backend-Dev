@@ -26,7 +26,7 @@ class InsurancePlanSerializer(serializers.ModelSerializer):
 class UserInsuranceSerializer(serializers.ModelSerializer):
     plan = InsurancePlanSerializer(read_only=True)
     plan_id = serializers.PrimaryKeyRelatedField(
-        queryset=InsurancePlan.objects.all(), source='plan', write_only=True
+        queryset=InsurancePlan.objects.all(), source='plan', write_only=True, required=False
     )
 
     class Meta:
@@ -37,6 +37,13 @@ class UserInsuranceSerializer(serializers.ModelSerializer):
             'insurance_card_back', 'created_at', 'updated_at'
         ]
         read_only_fields = ['user', 'created_at', 'updated_at']
+    
+    def to_internal_value(self, data):
+        """Handle 'plan' field from frontend and map it to 'plan_id'."""
+        if 'plan' in data and 'plan_id' not in data:
+            data = data.copy()
+            data['plan_id'] = data.pop('plan')
+        return super().to_internal_value(data)
 
 class InsuranceClaimSerializer(serializers.ModelSerializer):
     user_insurance = UserInsuranceSerializer(read_only=True)
