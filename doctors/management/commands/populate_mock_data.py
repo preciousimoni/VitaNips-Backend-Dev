@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from doctors.models import Doctor, Specialty, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem
 from pharmacy.models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder
-from health.models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
+from health.models import VitalSign, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
 from insurance.models import InsuranceProvider, InsurancePlan, UserInsurance, InsuranceClaim, InsuranceDocument
 from users.models import MedicalHistory, Vaccination
 import random
@@ -314,16 +314,6 @@ class Command(BaseCommand):
                     oxygen_saturation=random.randint(95, 100),
                     blood_glucose=round(random.uniform(80, 120), 1),
                     weight=round(random.uniform(60, 90), 1),
-                    notes=fake.sentence(),
-                )
-                
-                # Symptom Logs
-                SymptomLog.objects.create(
-                    user=user,
-                    symptom=random.choice(['Headache', 'Fever', 'Cough', 'Fatigue', 'Nausea']),
-                    date_experienced=timezone.now() - timedelta(days=random.randint(0, 30)),
-                    severity=random.randint(1, 4),
-                    duration=f"{random.randint(1, 8)} hours",
                     notes=fake.sentence(),
                 )
                 

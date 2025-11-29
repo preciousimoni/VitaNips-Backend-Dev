@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from faker import Faker
 import datetime
 from django.utils import timezone
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
+from .models import VitalSign, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument
 from django.core.files.uploadedfile import SimpleUploadedFile
 from doctors.models import Doctor, Appointment, Specialty
 
@@ -60,17 +60,6 @@ class HealthAPITests(APITestCase):
         response = self.client.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(VitalSign.objects.count(), 1)
-
-    def test_create_symptom_log(self):
-        url = reverse('symptom-log-list')
-        data = {
-            'symptom': 'Coughing',
-            'date_experienced': timezone.now(),
-            'severity': 2
-        }
-        response = self.client.post(url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(SymptomLog.objects.count(), 1)
 
     def test_create_food_log(self):
         url = reverse('food-log-list')

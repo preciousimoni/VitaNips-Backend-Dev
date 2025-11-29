@@ -79,6 +79,20 @@ class MedicationOrder(models.Model):
     patient_copay = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Patient's out-of-pocket amount")
     insurance_claim_generated = models.BooleanField(default=False, help_text="Whether an insurance claim was automatically generated")
     
+    # Payment fields
+    payment_reference = models.CharField(max_length=255, null=True, blank=True, help_text="Payment reference/transaction ID from payment gateway")
+    payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('paid', 'Paid'),
+            ('failed', 'Failed'),
+            ('refunded', 'Refunded'),
+        ],
+        default='pending',
+        help_text="Payment status for the order"
+    )
+    
     order_date = models.DateTimeField(auto_now_add=True)
     pickup_or_delivery_date = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True, null=True)

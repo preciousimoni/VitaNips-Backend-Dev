@@ -88,8 +88,10 @@ class DoctorApplicationView(generics.CreateAPIView, generics.RetrieveUpdateAPIVi
                 recipient=admin,
                 actor=request.user,
                 verb=f"New doctor application submitted by Dr. {doctor.first_name} {doctor.last_name}",
-                level='admin',
-                target_url=f"/admin/doctors"
+                title=f"New Doctor Application",
+                level='info',
+                category='system',
+                action_url=f"/admin/doctors"
             )
         
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -133,8 +135,10 @@ class DoctorApplicationView(generics.CreateAPIView, generics.RetrieveUpdateAPIVi
                     recipient=admin,
                     actor=request.user,
                     verb=f"Doctor application updated and resubmitted by Dr. {doctor.first_name} {doctor.last_name}",
-                    level='admin',
-                    target_url=f"/admin/doctors"
+                    title=f"Doctor Application Updated",
+                    level='info',
+                    category='system',
+                    action_url=f"/admin/doctors"
                 )
         
         return Response(serializer.data)
@@ -192,7 +196,9 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         # Handle insurance if provided
         user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        payment_reference = serializer.validated_data.pop('payment_reference', None)
         user_insurance = None
+        
         if user_insurance_id:
             from insurance.models import UserInsurance
             try:
@@ -200,14 +206,42 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
             except UserInsurance.DoesNotExist:
                 pass  # Continue without insurance if invalid
         
-        appointment = serializer.save(user=self.request.user, user_insurance=user_insurance)
+        # Check if payment is required
+        doctor = serializer.validated_data.get('doctor')
+        consultation_fee = None
+        if doctor and doctor.consultation_fee:
+            consultation_fee = doctor.consultation_fee
+        
+        # If no insurance and consultation fee exists, payment is required
+        if not user_insurance and consultation_fee and consultation_fee > 0:
+            # Allow creating appointment with payment_status='pending' without payment_reference
+            # Payment reference will be added later via PATCH when payment is completed
+            payment_status = 'paid' if payment_reference else 'pending'
+            appointment = serializer.save(
+                user=self.request.user,
+                user_insurance=user_insurance,
+                payment_reference=payment_reference if payment_reference else None,
+                payment_status=payment_status,
+                consultation_fee=consultation_fee
+            )
+        else:
+            # With insurance or no fee - payment not required
+            # Set payment_status based on whether payment_reference exists
+            payment_status = 'paid' if payment_reference else 'pending'
+            appointment = serializer.save(
+                user=self.request.user,
+                user_insurance=user_insurance,
+                payment_reference=payment_reference if payment_reference else None,
+                payment_status=payment_status,
+                consultation_fee=consultation_fee if consultation_fee else None
+            )
         
         # Calculate insurance coverage if insurance is selected
-        if user_insurance and appointment.doctor.consultation_fee:
+        if user_insurance and appointment.consultation_fee:
             from insurance.utils import calculate_insurance_coverage
             from decimal import Decimal
             
-            consultation_fee = Decimal(str(appointment.doctor.consultation_fee))
+            consultation_fee = Decimal(str(appointment.consultation_fee))
             coverage = calculate_insurance_coverage(
                 user_insurance,
                 consultation_fee,
@@ -252,9 +286,44 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
             else:
                 user_insurance = None  # Remove insurance
         
-        # Calculate insurance coverage if insurance is set
+        # Handle payment_reference if provided (from payment callback)
+        payment_reference = serializer.validated_data.pop('payment_reference', None)
+        old_payment_status = old_instance.payment_status
+        
+        # Save the appointment first
+        new_instance = serializer.save(user_insurance=user_insurance)
+        
+        # Update payment fields if payment_reference is provided
+        payment_status_changed = False
+        if payment_reference:
+            new_instance.payment_reference = payment_reference
+            new_instance.payment_status = 'paid'
+            new_instance.save()
+            payment_status_changed = (old_payment_status != 'paid' and new_instance.payment_status == 'paid')
+        
+        # Send notification when payment is confirmed
+        if payment_status_changed:
+            try:
+                patient = new_instance.user
+                doctor_name = new_instance.doctor.full_name if new_instance.doctor else "Doctor"
+                create_notification(
+                    recipient=patient,
+                    verb=f"Payment confirmed for your appointment with {doctor_name} on {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')}.",
+                    title=f"Payment Confirmed - Appointment",
+                    level='success',
+                    category='appointment',
+                    action_url=f"/appointments/{new_instance.id}",
+                    action_text="View Appointment"
+                )
+                print(f"Payment confirmation notification created for user {patient.id} for appointment {new_instance.id}")
+            except Exception as e:
+                print(f"Error creating payment confirmation notification for appointment {new_instance.id}: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Calculate insurance coverage if insurance is set (after saving, since these fields are read-only)
         if user_insurance:
-            consultation_fee = old_instance.doctor.consultation_fee if old_instance.doctor.consultation_fee else Decimal('0.00')
+            consultation_fee = new_instance.doctor.consultation_fee if new_instance.doctor and new_instance.doctor.consultation_fee else Decimal('0.00')
             
             if consultation_fee > 0:
                 coverage = calculate_insurance_coverage(
@@ -262,84 +331,148 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
                     consultation_fee,
                     service_type='consultation'
                 )
-                serializer.validated_data['consultation_fee'] = consultation_fee
-                serializer.validated_data['insurance_covered_amount'] = coverage['covered_amount']
-                serializer.validated_data['patient_copay'] = coverage['patient_copay']
-        
-        new_instance = serializer.save(user_insurance=user_insurance)
+                # Set these fields directly on the instance since they're read-only in serializer
+                new_instance.consultation_fee = consultation_fee
+                new_instance.insurance_covered_amount = coverage['covered_amount']
+                new_instance.patient_copay = coverage['patient_copay']
+                new_instance.save()
         
         # Generate insurance claim automatically when appointment is completed
         if old_instance.status != new_instance.status and new_instance.status == 'completed':
             if new_instance.user_insurance and new_instance.consultation_fee and not new_instance.insurance_claim_generated:
                 from insurance.utils import generate_insurance_claim
                 from django.utils import timezone
+                from decimal import Decimal
                 
                 try:
+                    # Get doctor name (full_name already includes "Dr.")
+                    doctor_name = new_instance.doctor.full_name if new_instance.doctor else "Unknown Doctor"
+                    
+                    # Ensure we have a valid date
+                    service_date = new_instance.date
+                    if not service_date:
+                        service_date = timezone.now().date()
+                    
+                    # Ensure we have valid amounts
+                    claimed_amount = new_instance.consultation_fee or Decimal('0.00')
+                    approved_amount = new_instance.insurance_covered_amount or Decimal('0.00')
+                    patient_responsibility = new_instance.patient_copay or Decimal('0.00')
+                    
                     claim = generate_insurance_claim(
                         user_insurance=new_instance.user_insurance,
                         service_type='consultation',
-                        service_date=new_instance.date,
-                        provider_name=f"Dr. {new_instance.doctor.full_name}",
-                        service_description=f"Consultation - {new_instance.reason}",
-                        claimed_amount=new_instance.consultation_fee,
-                        approved_amount=new_instance.insurance_covered_amount,
-                        patient_responsibility=new_instance.patient_copay,
+                        service_date=service_date,
+                        provider_name=doctor_name,
+                        service_description=f"Consultation - {new_instance.reason or 'General consultation'}",
+                        claimed_amount=claimed_amount,
+                        approved_amount=approved_amount,
+                        patient_responsibility=patient_responsibility,
                     )
                     new_instance.insurance_claim_generated = True
                     new_instance.save()
                 except Exception as e:
-                    print(f"Error generating insurance claim: {e}")
+                    import traceback
+                    print(f"Error generating insurance claim for appointment {new_instance.id}: {e}")
+                    print(traceback.format_exc())
+                    # Don't fail the appointment update if claim generation fails
 
-        if old_instance.status != new_instance.status and new_instance.status == 'confirmed':
-            patient = new_instance.user
-            doctor = new_instance.doctor
-            # Assuming the update was likely done by the doctor or admin (need proper permission checks later)
-            create_notification(
-                recipient=patient,
-                actor=doctor.user if hasattr(doctor, 'user') else None,
-                verb=f"Your appointment with Dr. {doctor.last_name} on {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')} is confirmed.",
-                level='appointment',
-                target_url=f"/appointments/{new_instance.id}"
-            )
-            print(f"Confirmation notification created for user {patient.id} for appointment {new_instance.id}")
-            
-        elif old_instance.status != new_instance.status and new_instance.status == 'completed':
-
-            new_prescription = Prescription.objects.filter(appointment=new_instance).first()
-            if new_prescription:
-                 patient = new_instance.user
-                 create_notification(
-                    recipient=patient,
-                    actor=new_instance.doctor.user if hasattr(new_instance.doctor, 'user') else None,
-                    verb=f"Your prescription from Dr. {new_instance.doctor.last_name} is ready.",
-                    level='prescription',
-                    target_url=f"/prescriptions/{new_prescription.id}"
-                )
-                 print(f"Prescription ready notification created for user {patient.id}")
-
-        elif old_instance.status != new_instance.status and new_instance.status == 'cancelled':
-            patient = new_instance.user
-            doctor = new_instance.doctor
-            other_party = None
-            canceller = self.request.user
-            if canceller == patient:
-                other_party = doctor.user if hasattr(doctor, 'user') and doctor.user else None 
-                cancelled_by = f"{patient.first_name} {patient.last_name}".strip() or patient.username
-            elif hasattr(canceller, 'doctor_profile') and canceller.doctor_profile == doctor:
-                other_party = patient
-                cancelled_by = f"Dr. {doctor.last_name}"
-            else:
-                other_party = patient
-
-            if other_party:
-                 create_notification(
-                    recipient=other_party,
-                    actor=canceller,
-                    verb=f"The appointment for {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')} with {'Dr. '+doctor.last_name if other_party == patient else patient.username} was cancelled by {cancelled_by}.",
-                    level='warning', # Or 'info'
-                    target_url=f"/appointments/{new_instance.id}"
-                )
-                 print(f"Cancellation notification created for user {other_party.id} for appointment {new_instance.id}")
+        # Send notifications for appointment status changes
+        status_changed = old_instance.status != new_instance.status
+        if status_changed:
+            try:
+                patient = new_instance.user
+                doctor = new_instance.doctor
+                if not doctor or not patient:
+                    return
+                
+                doctor_name = doctor.full_name if doctor.full_name else (doctor.last_name if doctor.last_name else (doctor.first_name if doctor.first_name else "Doctor"))
+                date_str = new_instance.date.strftime('%b %d') if new_instance.date else "TBD"
+                time_str = new_instance.start_time.strftime('%I:%M %p') if new_instance.start_time else "TBD"
+                
+                if new_instance.status == 'scheduled':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your appointment with {doctor_name} has been scheduled for {date_str} at {time_str}.",
+                        title=f"Appointment Scheduled",
+                        level='info',
+                        category='appointment',
+                        action_url=f"/appointments/{new_instance.id}",
+                        action_text="View Appointment"
+                    )
+                elif new_instance.status == 'confirmed':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your appointment with {doctor_name} on {date_str} at {time_str} is confirmed.",
+                        title=f"Appointment Confirmed",
+                        level='success',
+                        category='appointment',
+                        action_url=f"/appointments/{new_instance.id}",
+                        action_text="View Appointment"
+                    )
+                elif new_instance.status == 'rescheduled':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your appointment with {doctor_name} has been rescheduled to {date_str} at {time_str}.",
+                        title=f"Appointment Rescheduled",
+                        level='info',
+                        category='appointment',
+                        action_url=f"/appointments/{new_instance.id}",
+                        action_text="View Appointment"
+                    )
+                elif new_instance.status == 'completed':
+                    new_prescription = Prescription.objects.filter(appointment=new_instance).first()
+                    if new_prescription:
+                        create_notification(
+                            recipient=patient,
+                            verb=f"Your appointment with {doctor_name} is completed. Your prescription is ready.",
+                            title=f"Appointment Completed - Prescription Ready",
+                            level='success',
+                            category='prescription',
+                            action_url=f"/prescriptions/{new_prescription.id}",
+                            action_text="View Prescription"
+                        )
+                    else:
+                        create_notification(
+                            recipient=patient,
+                            verb=f"Your appointment with {doctor_name} has been completed.",
+                            title=f"Appointment Completed",
+                            level='success',
+                            category='appointment',
+                            action_url=f"/appointments/{new_instance.id}",
+                            action_text="View Appointment"
+                        )
+                elif new_instance.status == 'cancelled':
+                    canceller = self.request.user
+                    cancelled_by = f"{canceller.first_name} {canceller.last_name}".strip() if canceller != patient else "You"
+                    
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your appointment with {doctor_name} on {date_str} at {time_str} was cancelled by {cancelled_by}.",
+                        title=f"Appointment Cancelled",
+                        level='warning',
+                        category='appointment',
+                        action_url=f"/appointments/{new_instance.id}",
+                        action_text="View Details"
+                    )
+                    
+                    # Also notify doctor if patient cancelled
+                    if canceller == patient and doctor and hasattr(doctor, 'user') and doctor.user:
+                        create_notification(
+                            recipient=doctor.user,
+                            verb=f"Appointment with {patient.first_name} {patient.last_name} on {date_str} at {time_str} was cancelled by the patient.",
+                            title=f"Appointment Cancelled",
+                            level='warning',
+                            category='appointment',
+                            action_url=f"/appointments/{new_instance.id}",
+                            action_text="View Details"
+                        )
+                
+                print(f"Status change notification created for user {patient.id} for appointment {new_instance.id} (status: {new_instance.status})")
+            except Exception as e:
+                import traceback
+                print(f"Error creating status change notification for appointment {new_instance.id}: {e}")
+                print(traceback.format_exc())
+                # Don't fail the appointment update if notification creation fails
 
 class GetTwilioTokenView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -504,8 +637,11 @@ class ForwardPrescriptionView(views.APIView):
                 create_notification(
                     recipient=request.user,
                     verb=f"Your prescription has been forwarded to {pharmacy.name}. Order #{order.id} is being processed.",
-                    level='order',
-                    target_url=f"/orders/{order.id}"
+                    title=f"Prescription Forwarded - Order #{order.id}",
+                    level='success',
+                    category='order',
+                    action_url=f"/orders/{order.id}",
+                    action_text="View Order"
                 )
                 
                 # Log the action
@@ -568,11 +704,17 @@ class DoctorPrescriptionViewSet(viewsets.ModelViewSet):
         prescription = serializer.save()
         appointment = prescription.appointment
         patient = appointment.user
+        doctor_name = self.request.user.doctor_profile.full_name if self.request.user.doctor_profile.full_name else f"Dr. {self.request.user.doctor_profile.last_name}"
+        date_str = appointment.date.strftime('%b %d') if appointment.date else "your appointment"
+        
         create_notification(
             recipient=patient,
             actor=self.request.user,
-            verb=f"Dr. {self.request.user.doctor_profile.last_name} has issued a new prescription for your appointment on {appointment.date.strftime('%b %d')}.",
-            level='prescription',
-            target_url=f"/prescriptions/{prescription.id}"
+            verb=f"{doctor_name} has issued a new prescription for your appointment on {date_str}.",
+            title=f"New Prescription Available",
+            level='success',
+            category='prescription',
+            action_url=f"/prescriptions/{prescription.id}",
+            action_text="View Prescription"
         )
         print(f"New prescription notification created for user {patient.id} for prescription {prescription.id}")

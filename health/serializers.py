@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
+from .models import VitalSign, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
 from users.serializers import UserSerializer
 
 class VitalSignSerializer(serializers.ModelSerializer):
@@ -9,15 +9,6 @@ class VitalSignSerializer(serializers.ModelSerializer):
             'id', 'user', 'date_recorded', 'heart_rate', 'systolic_pressure',
             'diastolic_pressure', 'respiratory_rate', 'temperature', 'oxygen_saturation',
             'blood_glucose', 'weight', 'notes', 'source', 'created_at'
-        ]
-        read_only_fields = ['user', 'created_at']
-
-class SymptomLogSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SymptomLog
-        fields = [
-            'id', 'user', 'symptom', 'date_experienced', 'severity',
-            'duration', 'notes', 'created_at'
         ]
         read_only_fields = ['user', 'created_at']
 

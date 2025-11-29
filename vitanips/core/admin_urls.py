@@ -9,6 +9,8 @@ from .admin_views import (
     AdminPharmaciesListView,
     AdminPharmacyDetailView,
     AdminAnalyticsView,
+    AdminAppointmentsListView,
+    AdminRecentActivityView,
 )
 
 urlpatterns = [
@@ -29,4 +31,10 @@ urlpatterns = [
     
     # Analytics
     path('analytics/', AdminAnalyticsView.as_view(), name='admin-analytics'),
+    
+    # Appointments Management
+    path('appointments/', AdminAppointmentsListView.as_view(), name='admin-appointments-list'),
+    
+    # Recent Activity
+    path('activity/', AdminRecentActivityView.as_view(), name='admin-recent-activity'),
 ]

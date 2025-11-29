@@ -3,9 +3,9 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from notifications.utils import create_notification
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
+from .models import VitalSign, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
 from .serializers import (
-    VitalSignSerializer, SymptomLogSerializer, FoodLogSerializer,
+    VitalSignSerializer, FoodLogSerializer,
     ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer, MedicalDocumentSerializer,
     WaterIntakeLogSerializer, HealthInsightSerializer
 )
@@ -34,8 +34,11 @@ class MedicalDocumentListCreateView(generics.ListCreateAPIView):
                     recipient=doctor_user,
                     actor=patient,
                     verb=f"Patient {patient.first_name} {patient.last_name} uploaded a document ('{document.file.name or 'document'}') for appointment on {document.appointment.date.strftime('%b %d')}.",
+                    title=f"New Document Uploaded",
                     level='info',
-                    target_url=f"/portal/appointments/{document.appointment.id}/documents/"
+                    category='appointment',
+                    action_url=f"/portal/appointments/{document.appointment.id}/documents/",
+                    action_text="View Document"
                 )
 
 class MedicalDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -74,23 +77,6 @@ class VitalSignLatestView(generics.RetrieveAPIView):
 
     def get_object(self):
         return VitalSign.objects.filter(user=self.request.user).order_by('-date_recorded').first()
-
-class SymptomLogListCreateView(generics.ListCreateAPIView):
-    serializer_class = SymptomLogSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return SymptomLog.objects.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-class SymptomLogDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = SymptomLogSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return SymptomLog.objects.filter(user=self.request.user)
 
 class FoodLogListCreateView(generics.ListCreateAPIView):
     serializer_class = FoodLogSerializer

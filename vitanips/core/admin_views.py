@@ -401,14 +401,28 @@ class AdminAnalyticsView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
+        from calendar import monthrange
+        
         today = timezone.now().date()
         
-        # User growth over last 12 months
+        # User growth over last 12 months (more accurate calculation)
         user_growth = []
-        for i in range(12, 0, -1):
-            month_date = today - timedelta(days=30 * i)
-            month_start = month_date.replace(day=1)
-            month_end = (month_start + timedelta(days=32)).replace(day=1)
+        for i in range(11, -1, -1):  # Last 12 months including current
+            # Calculate month start by going back i months
+            month = today.month - i
+            year = today.year
+            while month <= 0:
+                month += 12
+                year -= 1
+            while month > 12:
+                month -= 12
+                year += 1
+            
+            month_start = today.replace(year=year, month=month, day=1)
+            
+            # Calculate last day of month properly
+            last_day = monthrange(month_start.year, month_start.month)[1]
+            month_end = month_start.replace(day=last_day) + timedelta(days=1)
             
             count = User.objects.filter(
                 created_at__gte=month_start,
@@ -420,22 +434,214 @@ class AdminAnalyticsView(APIView):
                 'count': count
             })
         
-        # Appointments by status
-        appointment_stats = Appointment.objects.values('status').annotate(
+        # Appointments by status (handle TextChoices properly)
+        appointment_stats = []
+        status_counts = Appointment.objects.values('status').annotate(
             count=Count('id')
         )
+        for stat in status_counts:
+            appointment_stats.append({
+                'status': stat['status'],
+                'count': stat['count']
+            })
         
-        # Top specialties
+        # Top specialties (handle ManyToMany properly)
         top_specialties = Doctor.objects.values(
             'specialties__name'
         ).annotate(
-            count=Count('id')
-        ).order_by('-count')[:5]
+            count=Count('id', distinct=True)
+        ).filter(specialties__name__isnull=False).order_by('-count')[:10]
+        
+        specialties_list = []
+        for spec in top_specialties:
+            specialties_list.append({
+                'specialties__name': spec['specialties__name'] or 'General',
+                'count': spec['count']
+            })
         
         analytics = {
             'user_growth': user_growth,
-            'appointments_by_status': list(appointment_stats),
-            'top_specialties': list(top_specialties),
+            'appointments_by_status': appointment_stats,
+            'top_specialties': specialties_list,
         }
         
         return Response(analytics, status=status.HTTP_200_OK)
+
+
+class AdminAppointmentsListView(APIView):
+    """
+    List all appointments on the platform (admin only)
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from doctors.serializers import AppointmentSerializer
+        
+        # Get query parameters
+        status_filter = request.query_params.get('status', None)
+        search_query = request.query_params.get('search', None)
+        date_from = request.query_params.get('date_from', None)
+        date_to = request.query_params.get('date_to', None)
+        
+        # Start with all appointments
+        appointments = Appointment.objects.select_related(
+            'user', 'doctor', 'doctor__user'
+        ).order_by('-date', '-start_time')
+        
+        # Apply filters
+        if status_filter:
+            appointments = appointments.filter(status=status_filter)
+        
+        if date_from:
+            appointments = appointments.filter(date__gte=date_from)
+        
+        if date_to:
+            appointments = appointments.filter(date__lte=date_to)
+        
+        if search_query:
+            appointments = appointments.filter(
+                Q(user__email__icontains=search_query) |
+                Q(user__first_name__icontains=search_query) |
+                Q(user__last_name__icontains=search_query) |
+                Q(doctor__first_name__icontains=search_query) |
+                Q(doctor__last_name__icontains=search_query) |
+                Q(reason__icontains=search_query)
+            )
+        
+        # Pagination
+        page_size = int(request.query_params.get('page_size', 20))
+        page = int(request.query_params.get('page', 1))
+        
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        total_count = appointments.count()
+        appointments_page = appointments[start:end]
+        
+        serializer = AppointmentSerializer(appointments_page, many=True, context={'request': request})
+        
+        return Response({
+            'count': total_count,
+            'next': f'/admin/appointments/?page={page + 1}' if end < total_count else None,
+            'previous': f'/admin/appointments/?page={page - 1}' if page > 1 else None,
+            'results': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class AdminRecentActivityView(APIView):
+    """
+    Get recent admin activities for the dashboard
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        from datetime import timedelta
+        
+        # Get activities from last 7 days
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        activities = []
+        
+        # 1. Recent doctor verifications
+        recent_doctor_verifications = Doctor.objects.filter(
+            reviewed_at__gte=seven_days_ago,
+            reviewed_by__isnull=False
+        ).select_related('user', 'reviewed_by').order_by('-reviewed_at')[:10]
+        
+        for doctor in recent_doctor_verifications:
+            if doctor.is_verified:
+                action = 'approved'
+                icon = 'check-circle'
+                color = 'green'
+            elif doctor.application_status == 'rejected':
+                action = 'rejected'
+                icon = 'x-circle'
+                color = 'red'
+            else:
+                action = 'reviewed'
+                icon = 'clock'
+                color = 'blue'
+            
+            activities.append({
+                'id': f'doctor_{doctor.id}_{doctor.reviewed_at.timestamp()}',
+                'type': 'doctor_verification',
+                'action': action,
+                'description': f"{action.capitalize()} doctor application for Dr. {doctor.first_name} {doctor.last_name}",
+                'target_name': f"Dr. {doctor.first_name} {doctor.last_name}",
+                'actor_name': doctor.reviewed_by.get_full_name() or doctor.reviewed_by.username,
+                'timestamp': doctor.reviewed_at.isoformat(),
+                'icon': icon,
+                'color': color,
+            })
+        
+        # 2. Recent user creations (by admins or new registrations)
+        recent_users = User.objects.filter(
+            created_at__gte=seven_days_ago
+        ).order_by('-created_at')[:10]
+        
+        for user in recent_users:
+            user_type = 'patient'
+            if user.is_staff or user.is_superuser:
+                user_type = 'admin'
+            elif hasattr(user, 'doctor_profile'):
+                user_type = 'doctor'
+            elif user.is_pharmacy_staff:
+                user_type = 'pharmacy'
+            
+            activities.append({
+                'id': f'user_{user.id}_{user.created_at.timestamp()}',
+                'type': 'user_created',
+                'action': 'created',
+                'description': f"New {user_type} account created: {user.get_full_name() or user.username}",
+                'target_name': user.get_full_name() or user.username,
+                'actor_name': 'System',
+                'timestamp': user.created_at.isoformat(),
+                'icon': 'user-plus',
+                'color': 'blue',
+            })
+        
+        # 3. Recent user status changes (if we track this via updated_at and is_active changes)
+        # This is a simplified version - in production you'd want an audit log
+        recent_user_updates = User.objects.filter(
+            updated_at__gte=seven_days_ago
+        ).exclude(created_at__gte=seven_days_ago).order_by('-updated_at')[:5]
+        
+        for user in recent_user_updates:
+            if not user.is_active:
+                activities.append({
+                    'id': f'user_deactivated_{user.id}_{user.updated_at.timestamp()}',
+                    'type': 'user_status',
+                    'action': 'deactivated',
+                    'description': f"User account deactivated: {user.get_full_name() or user.username}",
+                    'target_name': user.get_full_name() or user.username,
+                    'actor_name': 'Admin',
+                    'timestamp': user.updated_at.isoformat(),
+                    'icon': 'user-minus',
+                    'color': 'orange',
+                })
+        
+        # 4. Recent appointments (significant ones)
+        recent_completed_appointments = Appointment.objects.filter(
+            status='completed',
+            updated_at__gte=seven_days_ago
+        ).select_related('user', 'doctor').order_by('-updated_at')[:5]
+        
+        for appointment in recent_completed_appointments:
+            activities.append({
+                'id': f'appointment_{appointment.id}_{appointment.updated_at.timestamp()}',
+                'type': 'appointment',
+                'action': 'completed',
+                'description': f"Appointment completed: {appointment.patient_name or 'Patient'} with Dr. {appointment.doctor_name or 'Doctor'}",
+                'target_name': appointment.patient_name or 'Patient',
+                'actor_name': f"Dr. {appointment.doctor_name or 'Doctor'}",
+                'timestamp': appointment.updated_at.isoformat(),
+                'icon': 'check-circle',
+                'color': 'green',
+            })
+        
+        # Sort all activities by timestamp (most recent first)
+        activities.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # Return top 10 most recent
+        return Response({
+            'activities': activities[:10]
+        }, status=status.HTTP_200_OK)

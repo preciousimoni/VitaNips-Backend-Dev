@@ -23,6 +23,11 @@ SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')])
 
+# Flutterwave Payment Gateway Configuration
+FLUTTERWAVE_SECRET_KEY = config('FLUTTERWAVE_SECRET_KEY', default='')
+FLUTTERWAVE_PUBLIC_KEY = config('FLUTTERWAVE_PUBLIC_KEY', default='')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
 CSRF_TRUSTED_ORIGINS = ['https://vitanips.onrender.com']
 
 # Application definition
@@ -61,7 +66,8 @@ INSTALLED_APPS = [
     'health',
     'insurance',
     'emergency',
-    'notifications'
+    'notifications',
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -254,7 +260,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Appointments', 'description': 'Book, manage, and track appointments'},
         {'name': 'Prescriptions', 'description': 'View and manage prescriptions'},
         {'name': 'Pharmacy', 'description': 'Pharmacies, medications, and orders'},
-        {'name': 'Health', 'description': 'Vital signs, symptoms, medical documents'},
+        {'name': 'Health', 'description': 'Vital signs, medical documents'},
         {'name': 'Insurance', 'description': 'Insurance coverage and claims'},
         {'name': 'Emergency', 'description': 'Emergency services and SOS alerts'},
         {'name': 'Notifications', 'description': 'In-app notifications and preferences'},

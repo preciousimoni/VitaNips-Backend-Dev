@@ -121,7 +121,89 @@ class PharmacyOrderDetailView(generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         """Override to trigger notification on status change by pharmacy and handle insurance."""
         old_instance = self.get_object()
+        
+        # Handle payment_reference if provided
+        payment_reference = serializer.validated_data.pop('payment_reference', None)
+        old_payment_status = old_instance.payment_status
+        
         new_instance = serializer.save()
+        
+        # Update payment fields if payment_reference is provided
+        payment_status_changed = False
+        if payment_reference:
+            new_instance.payment_reference = payment_reference
+            new_instance.payment_status = 'paid'
+            new_instance.save()
+            payment_status_changed = (old_payment_status != 'paid' and new_instance.payment_status == 'paid')
+        
+        # Send notification when payment is confirmed
+        if payment_status_changed:
+            try:
+                patient = new_instance.user
+                create_notification(
+                    recipient=patient,
+                    verb=f"Payment confirmed for your medication order #{new_instance.id}.",
+                    title=f"Payment Confirmed - Order #{new_instance.id}",
+                    level='success',
+                    category='order',
+                    action_url=f"/orders/{new_instance.id}",
+                    action_text="View Order"
+                )
+                print(f"Payment confirmation notification created for user {patient.id} for order {new_instance.id}")
+            except Exception as e:
+                print(f"Error creating payment confirmation notification for order {new_instance.id}: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Check if payment is required when trying to change status from pending
+        # Payment is required when pharmacy sets total_amount and user tries to proceed
+        # Only check this when status is actually being changed, not when just updating total_amount
+        status_changed = old_instance.status != new_instance.status
+        if status_changed and old_instance.status == 'pending' and new_instance.status != 'pending' and new_instance.status != 'cancelled':
+            if not new_instance.user_insurance and new_instance.total_amount and new_instance.total_amount > 0:
+                if not new_instance.payment_reference or new_instance.payment_status != 'paid':
+                    from rest_framework.exceptions import ValidationError
+                    raise ValidationError({
+                        'status': 'Payment is required for this order. Please ensure the patient has completed payment before the order can proceed to processing.'
+                    })
+        
+        # Check if total_amount was just added (price was set for the first time)
+        total_amount_added = (
+            (old_instance.total_amount is None or old_instance.total_amount == 0) and
+            new_instance.total_amount and
+            new_instance.total_amount > 0
+        )
+        
+        # Send notification when pharmacy adds prices to order
+        if total_amount_added:
+            try:
+                patient = new_instance.user
+                pharmacy_name = new_instance.pharmacy.name if new_instance.pharmacy else "Pharmacy"
+                
+                # Format the total amount
+                from decimal import Decimal
+                total_formatted = f"₦{Decimal(str(new_instance.total_amount)):,.2f}"
+                
+                # Check if insurance is being used
+                if new_instance.user_insurance:
+                    message = f"Your medication order #{new_instance.id} from {pharmacy_name} has been priced at {total_formatted}. Your insurance coverage and copay have been calculated."
+                else:
+                    message = f"Your medication order #{new_instance.id} from {pharmacy_name} has been priced at {total_formatted}. Please proceed with payment to continue."
+                
+                create_notification(
+                    recipient=patient,
+                    verb=message,
+                    title=f"Order #{new_instance.id} Priced",
+                    level='info',
+                    category='order',
+                    action_url=f"/orders/{new_instance.id}",
+                    action_text="View Order & Pay"
+                )
+                logger.info(f"Price notification created for user {patient.id} for order {new_instance.id} (total: {total_formatted})")
+            except Exception as e:
+                logger.error(f"Error creating price notification for order {new_instance.id}: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Recalculate insurance if total_amount is updated
         if new_instance.user_insurance and new_instance.total_amount:
@@ -167,27 +249,70 @@ class PharmacyOrderDetailView(generics.RetrieveUpdateAPIView):
                 except Exception as e:
                     print(f"Error generating insurance claim for order {new_instance.id}: {e}")
 
-        if old_instance.status != new_instance.status and new_instance.status == 'ready':
-            patient = new_instance.user
-            create_notification(
-                recipient=patient,
-                actor=self.request.user,
-                verb=f"Your medication order #{new_instance.id} from {new_instance.pharmacy.name} is ready for {'delivery' if new_instance.is_delivery else 'pickup'}.",
-                level='order',
-                target_url=f"/orders/{new_instance.id}"
-            )
-            print(f"Order ready notification created for user {patient.id} for order {new_instance.id}")
-
-        elif old_instance.status != new_instance.status and new_instance.status == 'delivering':
-            patient = new_instance.user
-            create_notification(
-                recipient=patient,
-                actor=self.request.user,
-                verb=f"Your medication order #{new_instance.id} from {new_instance.pharmacy.name} is out for delivery.",
-                level='order',
-                target_url=f"/orders/{new_instance.id}"
-            )
-            print(f"Order delivering notification created for user {patient.id} for order {new_instance.id}")
+        # Send notifications for order status changes
+        status_changed = old_instance.status != new_instance.status
+        if status_changed:
+            try:
+                patient = new_instance.user
+                pharmacy_name = new_instance.pharmacy.name if new_instance.pharmacy else "Pharmacy"
+                
+                if new_instance.status == 'processing':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your medication order #{new_instance.id} from {pharmacy_name} is now being processed.",
+                        title=f"Order #{new_instance.id} Processing",
+                        level='info',
+                        category='order',
+                        action_url=f"/orders/{new_instance.id}",
+                        action_text="View Order"
+                    )
+                elif new_instance.status == 'ready':
+                    delivery_text = 'delivery' if new_instance.is_delivery else 'pickup'
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your medication order #{new_instance.id} from {pharmacy_name} is ready for {delivery_text}.",
+                        title=f"Order #{new_instance.id} Ready",
+                        level='success',
+                        category='order',
+                        action_url=f"/orders/{new_instance.id}",
+                        action_text="View Order"
+                    )
+                elif new_instance.status == 'delivering':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your medication order #{new_instance.id} from {pharmacy_name} is out for delivery.",
+                        title=f"Order #{new_instance.id} Out for Delivery",
+                        level='info',
+                        category='order',
+                        action_url=f"/orders/{new_instance.id}",
+                        action_text="Track Order"
+                    )
+                elif new_instance.status == 'completed':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your medication order #{new_instance.id} from {pharmacy_name} has been completed.",
+                        title=f"Order #{new_instance.id} Completed",
+                        level='success',
+                        category='order',
+                        action_url=f"/orders/{new_instance.id}",
+                        action_text="View Order"
+                    )
+                elif new_instance.status == 'cancelled':
+                    create_notification(
+                        recipient=patient,
+                        verb=f"Your medication order #{new_instance.id} from {pharmacy_name} has been cancelled.",
+                        title=f"Order #{new_instance.id} Cancelled",
+                        level='warning',
+                        category='order',
+                        action_url=f"/orders/{new_instance.id}",
+                        action_text="View Details"
+                    )
+                
+                print(f"Status change notification created for user {patient.id} for order {new_instance.id} (status: {new_instance.status})")
+            except Exception as e:
+                print(f"Error creating status change notification for order {new_instance.id}: {e}")
+                import traceback
+                traceback.print_exc()
 
 class MedicationListView(generics.ListAPIView):
     queryset = Medication.objects.all()
@@ -346,6 +471,15 @@ class CreateOrderFromPrescriptionView(views.APIView):
             except UserInsurance.DoesNotExist:
                 pass  # Continue without insurance if invalid
         
+        # --- Handle Payment if no insurance ---
+        payment_reference = request.data.get('payment_reference', None)
+        
+        # If no insurance, payment is required (will be set when pharmacy sets total_amount)
+        # For now, we'll create the order and payment will be required when pharmacy updates with total_amount
+        payment_status = 'pending'
+        if payment_reference:
+            payment_status = 'paid'
+        
         # --- Create Order and Items (If all validations pass) ---
         order = MedicationOrder.objects.create(
             user=request.user,
@@ -353,6 +487,8 @@ class CreateOrderFromPrescriptionView(views.APIView):
             prescription=prescription,
             status='pending', # Default status for new orders
             user_insurance=user_insurance,
+            payment_reference=payment_reference,
+            payment_status=payment_status,
             # is_delivery, delivery_address, total_amount, notes would be set later by user/pharmacy
         )
 
@@ -372,6 +508,35 @@ class CreateOrderFromPrescriptionView(views.APIView):
         
         # Prefetch related items for serialization
         order = MedicationOrder.objects.prefetch_related('items__prescription_item').get(pk=order.pk)
+
+        # Send notifications to all pharmacy staff members
+        try:
+            from users.models import User
+            pharmacy_staff = User.objects.filter(
+                is_pharmacy_staff=True,
+                works_at_pharmacy=pharmacy,
+                is_active=True
+            )
+            
+            patient_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.email
+            prescription_items_count = prescription_items.count()
+            
+            for staff_member in pharmacy_staff:
+                create_notification(
+                    recipient=staff_member,
+                    verb=f"New medication order #{order.id} received from {patient_name}. Prescription includes {prescription_items_count} medication(s).",
+                    title=f"New Order #{order.id}",
+                    level='info',
+                    category='order',
+                    actor=request.user,
+                    action_url=f"/portal/orders/{order.id}",
+                    action_text="View Order"
+                )
+            logger.info(f"Created notifications for {pharmacy_staff.count()} pharmacy staff members for order {order.id}")
+        except Exception as e:
+            logger.error(f"Error creating notifications for pharmacy staff for order {order.id}: {e}")
+            import traceback
+            traceback.print_exc()
 
         # Serialize the newly created order
         try:
@@ -406,6 +571,36 @@ class MedicationOrderListCreateView(generics.ListCreateAPIView):
         
         order = serializer.save(user=self.request.user, user_insurance=user_insurance)
         
+        # Send notifications to all pharmacy staff members
+        if order.pharmacy:
+            try:
+                from users.models import User
+                pharmacy_staff = User.objects.filter(
+                    is_pharmacy_staff=True,
+                    works_at_pharmacy=order.pharmacy,
+                    is_active=True
+                )
+                
+                patient_name = f"{self.request.user.first_name} {self.request.user.last_name}".strip() or self.request.user.email
+                items_count = order.items.count() if hasattr(order, 'items') else 0
+                
+                for staff_member in pharmacy_staff:
+                    create_notification(
+                        recipient=staff_member,
+                        verb=f"New medication order #{order.id} received from {patient_name}. Order includes {items_count} medication(s).",
+                        title=f"New Order #{order.id}",
+                        level='info',
+                        category='order',
+                        actor=self.request.user,
+                        action_url=f"/portal/orders/{order.id}",
+                        action_text="View Order"
+                    )
+                logger.info(f"Created notifications for {pharmacy_staff.count()} pharmacy staff members for order {order.id}")
+            except Exception as e:
+                logger.error(f"Error creating notifications for pharmacy staff for order {order.id}: {e}")
+                import traceback
+                traceback.print_exc()
+        
         # Calculate insurance coverage if insurance is selected and total_amount is set
         if user_insurance and order.total_amount:
             from insurance.utils import calculate_insurance_coverage
@@ -429,12 +624,47 @@ class MedicationOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         return MedicationOrder.objects.filter(user=self.request.user)
     
+    def update(self, request, *args, **kwargs):
+        """Override update to ensure we return the updated instance with correct payment_status"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # Get the updated instance (it should have payment_status updated in perform_update)
+        updated_instance = self.get_object()
+        # Force refresh from database to ensure we have the latest payment_status
+        updated_instance.refresh_from_db(fields=['payment_reference', 'payment_status', 'status', 'total_amount'])
+        
+        # Return the updated instance with fresh data
+        response_serializer = self.get_serializer(updated_instance)
+        response_data = response_serializer.data
+        
+        # Ensure payment_status is in the response (in case serializer method fails)
+        # Force refresh payment_status from database to ensure we return the latest value
+        updated_instance.refresh_from_db(fields=['payment_status', 'payment_reference'])
+        actual_payment_status = updated_instance.payment_status
+        
+        # Override payment_status in response if serializer method didn't return correct value
+        if 'payment_status' not in response_data or response_data['payment_status'] != actual_payment_status:
+            logger.warning(f"Payment status mismatch - serializer returned: {response_data.get('payment_status')}, actual DB value: {actual_payment_status}")
+            response_data['payment_status'] = actual_payment_status
+        
+        # Also ensure payment_reference is in response if it exists
+        if updated_instance.payment_reference and 'payment_reference' not in response_data:
+            response_data['payment_reference'] = updated_instance.payment_reference
+        
+        logger.info(f"Returning order {updated_instance.id} with payment_status: {response_data.get('payment_status')}, payment_reference: {response_data.get('payment_reference')}")
+        return Response(response_data)
+    
     def perform_update(self, serializer):
         """Override to handle insurance calculation and claim generation."""
         old_instance = self.get_object()
         
         # Handle insurance if being updated
         user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        payment_reference = serializer.validated_data.pop('payment_reference', None)
         user_insurance = old_instance.user_insurance  # Keep existing if not updating
         
         if user_insurance_id is not None:  # Explicitly set (could be None to remove)
@@ -448,6 +678,50 @@ class MedicationOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
                 user_insurance = None  # Remove insurance
         
         new_instance = serializer.save(user_insurance=user_insurance)
+        
+        # Update payment fields if payment_reference is provided
+        payment_status_changed = False
+        if payment_reference:
+            old_payment_status = old_instance.payment_status
+            logger.info(f"Updating order {new_instance.id} with payment_reference: {payment_reference}")
+            logger.info(f"Order {new_instance.id} current payment_status before update: {new_instance.payment_status}")
+            logger.info(f"Order {new_instance.id} current payment_reference before update: {new_instance.payment_reference}")
+            
+            # Use update() to ensure atomic update
+            from pharmacy.models import MedicationOrder
+            updated_count = MedicationOrder.objects.filter(pk=new_instance.id).update(
+                payment_reference=payment_reference,
+                payment_status='paid'
+            )
+            
+            if updated_count > 0:
+                logger.info(f"✓ Order {new_instance.id} payment fields updated successfully via QuerySet.update()")
+                # Refresh the instance to get updated values
+                new_instance.refresh_from_db(fields=['payment_reference', 'payment_status'])
+                logger.info(f"Order {new_instance.id} payment_status after refresh: {new_instance.payment_status}")
+                logger.info(f"Order {new_instance.id} payment_reference after refresh: {new_instance.payment_reference}")
+                payment_status_changed = (old_payment_status != 'paid' and new_instance.payment_status == 'paid')
+            else:
+                logger.error(f"❌ Failed to update order {new_instance.id} - no rows affected")
+        
+        # Send notification when payment is confirmed
+        if payment_status_changed:
+            try:
+                patient = new_instance.user
+                create_notification(
+                    recipient=patient,
+                    verb=f"Payment confirmed for your medication order #{new_instance.id}.",
+                    title=f"Payment Confirmed - Order #{new_instance.id}",
+                    level='success',
+                    category='order',
+                    action_url=f"/orders/{new_instance.id}",
+                    action_text="View Order"
+                )
+                logger.info(f"Payment confirmation notification created for user {patient.id} for order {new_instance.id}")
+            except Exception as e:
+                logger.error(f"Error creating payment confirmation notification for order {new_instance.id}: {e}")
+                import traceback
+                traceback.print_exc()
         
         # Recalculate insurance if total_amount is set and insurance exists
         if user_insurance and new_instance.total_amount:
@@ -571,6 +845,23 @@ class LogMedicationIntakeView(views.APIView):
         reminder = get_object_or_404(MedicationReminder, pk=reminder_id, user=request.user)
         
         status_value = request.data.get('status', 'taken')
+        taken_at = request.data.get('taken_at') # Optional override
+        notes = request.data.get('notes', '')
+        
+        if not taken_at and status_value == 'taken':
+            from django.utils import timezone
+            taken_at = timezone.now()
+            
+        # Create the log entry
+        log = MedicationLog.objects.create(
+            reminder=reminder,
+            scheduled_time=taken_at or timezone.now(), # Simplified logic; ideally match to next schedule
+            taken_at=taken_at,
+            status=status_value,
+            notes=notes
+        )
+        
+        return Response(MedicationLogSerializer(log).data, status=status.HTTP_201_CREATED)
         taken_at = request.data.get('taken_at') # Optional override
         notes = request.data.get('notes', '')
         

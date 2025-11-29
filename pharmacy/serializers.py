@@ -113,6 +113,7 @@ class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
     items = PharmacyOrderItemViewSerializer(many=True, read_only=True)
     user = UserSerializer(read_only=True)
     user_insurance = serializers.SerializerMethodField(read_only=True)
+    payment_status = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = MedicationOrder
@@ -121,13 +122,13 @@ class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
             'delivery_address', 'total_amount', 'order_date',
             'pickup_or_delivery_date', 'notes', 'items',
             'user_insurance', 'insurance_covered_amount', 'patient_copay',
-            'insurance_claim_generated'
+            'insurance_claim_generated', 'payment_reference', 'payment_status'
         ]
         read_only_fields = [
             'id', 'user', 'pharmacy', 'prescription', 'order_date',
             'items', 'is_delivery', 'delivery_address', 'total_amount',
             'user_insurance', 'insurance_covered_amount', 'patient_copay',
-            'insurance_claim_generated'
+            'insurance_claim_generated', 'payment_status'
         ]
     
     def get_user_insurance(self, obj):
@@ -135,6 +136,22 @@ class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
             from insurance.serializers import UserInsuranceSerializer
             return UserInsuranceSerializer(obj.user_insurance).data
         return None
+    
+    def get_payment_status(self, obj):
+        """Safely get payment_status, handling cases where the field doesn't exist in DB yet"""
+        try:
+            # Refresh from database to get the latest payment_status
+            # This ensures we get the updated value after payment_reference is set
+            if hasattr(obj, 'pk') and obj.pk:
+                try:
+                    obj.refresh_from_db(fields=['payment_status', 'payment_reference'])
+                except Exception:
+                    pass  # If refresh fails, use current value
+            if hasattr(obj, 'payment_status'):
+                return obj.payment_status
+            return 'pending'  # Default value if field doesn't exist
+        except (AttributeError, KeyError):
+            return 'pending'
 
 class MedicationOrderSerializer(serializers.ModelSerializer):
     items = MedicationOrderItemSerializer(many=True)
@@ -150,6 +167,13 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
         help_text="ID of the insurance plan to use for this order"
     )
     user_insurance = serializers.SerializerMethodField(read_only=True)
+    payment_reference = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Payment reference/transaction ID from payment gateway"
+    )
+    payment_status = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = MedicationOrder
@@ -158,12 +182,13 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
             'delivery_address', 'total_amount', 'order_date',
             'pickup_or_delivery_date', 'notes', 'items',
             'user_insurance', 'user_insurance_id', 'insurance_covered_amount',
-            'patient_copay', 'insurance_claim_generated'
+            'patient_copay', 'insurance_claim_generated',
+            'payment_reference', 'payment_status'
         ]
         read_only_fields = [
             'user', 'order_date', 'status', 'total_amount',
             'user_insurance', 'insurance_covered_amount', 'patient_copay',
-            'insurance_claim_generated'
+            'insurance_claim_generated', 'payment_status'
         ]
     
     def validate_user_insurance_id(self, value):
@@ -187,6 +212,35 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
             return UserInsuranceSerializer(obj.user_insurance).data
         return None
 
+    def get_payment_status(self, obj):
+        """Safely get payment_status, always fetching fresh from database"""
+        try:
+            # Always refresh from database to get the latest payment_status
+            # This ensures we get the updated value after payment_reference is set
+            if hasattr(obj, 'pk') and obj.pk:
+                try:
+                    # Force refresh from database
+                    obj.refresh_from_db(fields=['payment_status', 'payment_reference'])
+                    # Double-check by querying directly to ensure we have the latest value
+                    from pharmacy.models import MedicationOrder
+                    db_obj = MedicationOrder.objects.filter(pk=obj.pk).values('payment_status', 'payment_reference').first()
+                    if db_obj:
+                        # Use the value directly from database
+                        return db_obj['payment_status']
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to refresh payment_status for order {obj.pk}: {e}")
+                    # If refresh fails, use current value
+            if hasattr(obj, 'payment_status'):
+                return obj.payment_status
+            return 'pending'  # Default value if field doesn't exist
+        except (AttributeError, KeyError) as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting payment_status for order {getattr(obj, 'pk', 'unknown')}: {e}")
+            return 'pending'
+
     def create(self, validated_data):
         items_data = validated_data.pop('items')
         order = MedicationOrder.objects.create(**validated_data)
@@ -197,6 +251,12 @@ class MedicationOrderSerializer(serializers.ModelSerializer):
 
 class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
     user_insurance = serializers.SerializerMethodField(read_only=True)
+    payment_reference = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Payment reference/transaction ID from payment gateway"
+    )
     ALLOWED_STATUS_TRANSITIONS = {
         'pending': ['processing', 'cancelled'],
         'processing': ['ready', 'cancelled'],
@@ -209,7 +269,7 @@ class PharmacyOrderUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'status', 'notes', 'pickup_or_delivery_date', 'total_amount',
             'user_insurance', 'insurance_covered_amount', 'patient_copay',
-            'insurance_claim_generated'
+            'insurance_claim_generated', 'payment_reference'
         ]
         read_only_fields = [
             'user_insurance', 'insurance_covered_amount', 'patient_copay',

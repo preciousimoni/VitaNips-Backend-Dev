@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from faker import Faker
 from .models import (
-    VitalSign, SymptomLog, FoodLog, ExerciseLog,
+    VitalSign, FoodLog, ExerciseLog,
     SleepLog, HealthGoal, MedicalDocument
 )
 from doctors.models import Doctor, Appointment, Specialty
@@ -58,16 +58,6 @@ class HealthModelTests(TestCase):
         self.assertEqual(VitalSign.objects.count(), 1)
         self.assertEqual(vital.user, self.user)
         self.assertEqual(vital.heart_rate, 80)
-
-    def test_create_symptom_log(self):
-        symptom = SymptomLog.objects.create(
-            user=self.user,
-            symptom='Headache',
-            date_experienced=datetime.datetime.now(),
-            severity=2
-        )
-        self.assertEqual(SymptomLog.objects.count(), 1)
-        self.assertEqual(symptom.symptom, 'Headache')
 
     def test_create_food_log(self):
         food = FoodLog.objects.create(

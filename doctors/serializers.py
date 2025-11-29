@@ -158,6 +158,13 @@ class AppointmentSerializer(serializers.ModelSerializer):
         help_text="ID of the insurance plan to use for this appointment"
     )
     user_insurance = serializers.SerializerMethodField(read_only=True)
+    payment_reference = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Payment reference/transaction ID from payment gateway"
+    )
+    payment_status = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = Appointment
@@ -167,12 +174,14 @@ class AppointmentSerializer(serializers.ModelSerializer):
             'patient_name', 'patient_email', 'doctor_name',
             'user_insurance', 'user_insurance_id', 'consultation_fee',
             'insurance_covered_amount', 'patient_copay', 'insurance_claim_generated',
+            'payment_reference', 'payment_status',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'user', 'patient_name', 'patient_email', 'doctor_name',
             'user_insurance', 'consultation_fee', 'insurance_covered_amount',
-            'patient_copay', 'insurance_claim_generated', 'created_at', 'updated_at'
+            'patient_copay', 'insurance_claim_generated',
+            'created_at', 'updated_at'
         ]
     
     def validate_user_insurance_id(self, value):
@@ -196,15 +205,33 @@ class AppointmentSerializer(serializers.ModelSerializer):
             return UserInsuranceSerializer(obj.user_insurance).data
         return None
 
+    def get_payment_status(self, obj):
+        """Safely get payment_status, handling cases where the field doesn't exist in DB yet"""
+        try:
+            # Check if the field exists on the model instance
+            if hasattr(obj, 'payment_status'):
+                return obj.payment_status
+            return 'pending'  # Default value if field doesn't exist
+        except (AttributeError, KeyError):
+            return 'pending'
+
     def get_patient_name(self, obj):
         if obj.user:
             return obj.user.get_full_name() or obj.user.username
         return None
     
     def get_doctor_name(self, obj):
-        if obj.doctor:
-            return f"Dr. {obj.doctor.last_name}" if obj.doctor.last_name else f"Dr. {obj.doctor.first_name}"
-        return None
+        try:
+            if obj.doctor:
+                if obj.doctor.last_name:
+                    return f"Dr. {obj.doctor.last_name}"
+                elif obj.doctor.first_name:
+                    return f"Dr. {obj.doctor.first_name}"
+                else:
+                    return "Dr. Unknown"
+            return None
+        except (AttributeError, TypeError):
+            return None
 
     def validate(self, data):
         instance = getattr(self, 'instance', None)

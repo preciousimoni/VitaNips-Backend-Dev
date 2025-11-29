@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import VitalSign, SymptomLog, FoodLog, ExerciseLog, SleepLog, HealthGoal
+from .models import VitalSign, FoodLog, ExerciseLog, SleepLog, HealthGoal
 
 @admin.register(VitalSign)
 class VitalSignAdmin(admin.ModelAdmin):
@@ -7,13 +7,6 @@ class VitalSignAdmin(admin.ModelAdmin):
     search_fields = ('user__email',)
     list_filter = ('date_recorded',)
     ordering = ('-date_recorded',)
-
-@admin.register(SymptomLog)
-class SymptomLogAdmin(admin.ModelAdmin):
-    list_display = ('user', 'symptom', 'date_experienced', 'severity')
-    search_fields = ('user__email', 'symptom')
-    list_filter = ('severity', 'date_experienced')
-    ordering = ('-date_experienced',)
 
 @admin.register(FoodLog)
 class FoodLogAdmin(admin.ModelAdmin):

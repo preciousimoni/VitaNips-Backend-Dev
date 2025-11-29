@@ -25,27 +25,6 @@ class VitalSign(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.date_recorded}"
 
-class SymptomLog(models.Model):
-    SEVERITY_CHOICES = (
-        (1, 'Mild'),
-        (2, 'Moderate'),
-        (3, 'Severe'),
-        (4, 'Very Severe'),
-    )
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='symptom_logs')
-    symptom = models.CharField(max_length=200)
-    date_experienced = models.DateTimeField()
-    severity = models.IntegerField(choices=SEVERITY_CHOICES)
-    # e.g., "2 hours", "all day"
-    duration = models.CharField(max_length=100, blank=True, null=True)
-    notes = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.user.email} - {self.symptom} - {self.date_experienced}"
-
 class FoodLog(models.Model):
     MEAL_CHOICES = (
         ('breakfast', 'Breakfast'),
