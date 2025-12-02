@@ -5,7 +5,15 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from decimal import Decimal
 from django.conf import settings
+from django.utils import timezone
 from .services import flutterwave_service
+from .commission_service import (
+    calculate_appointment_commission,
+    calculate_medication_order_commission,
+    calculate_virtual_session_commission,
+    get_commission_breakdown
+)
+from .models import Transaction
 import uuid
 import logging
 
@@ -57,9 +65,9 @@ class InitializePaymentView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if not payment_type or payment_type not in ['appointment', 'medication_order']:
+        if not payment_type or payment_type not in ['appointment', 'medication_order', 'virtual_session']:
             return Response(
-                {'error': 'Invalid payment_type. Must be "appointment" or "medication_order"'},
+                {'error': 'Invalid payment_type. Must be "appointment", "medication_order", or "virtual_session"'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -91,12 +99,16 @@ class InitializePaymentView(APIView):
             )
             
             if result.get('status') == 'success':
+                # Calculate commission breakdown for display
+                commission_breakdown = get_commission_breakdown(payment_type, amount)
+                
                 return Response({
                     'authorization_url': result['data']['link'],
                     'reference': reference,
                     'tx_ref': result['data'].get('tx_ref', reference),
                     'amount': str(amount),
-                    'public_key': getattr(settings, 'FLUTTERWAVE_PUBLIC_KEY', '')
+                    'public_key': getattr(settings, 'FLUTTERWAVE_PUBLIC_KEY', ''),
+                    'commission_breakdown': commission_breakdown
                 }, status=status.HTTP_200_OK)
             else:
                 return Response(
@@ -157,12 +169,50 @@ class VerifyPaymentView(APIView):
                             'user_id': request.user.id
                         }
                 
+                # Get payment details
+                payment_type = metadata.get('payment_type', 'unknown')
+                payment_for_id = metadata.get('payment_for_id')
+                gross_amount = Decimal(str(transaction_data.get('amount', 0)))
+                
+                # Calculate commission
+                if payment_type == 'appointment':
+                    commission, net_amount = calculate_appointment_commission(gross_amount)
+                elif payment_type == 'medication_order':
+                    commission, net_amount = calculate_medication_order_commission(gross_amount)
+                elif payment_type == 'virtual_session':
+                    commission, net_amount = calculate_virtual_session_commission(gross_amount, use_flat_fee=True)
+                else:
+                    commission = Decimal('0.00')
+                    net_amount = gross_amount
+                
+                # Create transaction record
+                transaction = Transaction.objects.create(
+                    transaction_type=payment_type,
+                    reference=reference,
+                    user=request.user,
+                    related_object_id=payment_for_id,
+                    related_object_type=payment_type,
+                    gross_amount=gross_amount,
+                    platform_commission=commission,
+                    net_amount=net_amount,
+                    status='completed',
+                    payment_gateway='flutterwave',
+                    payment_method=transaction_data.get('payment_type', 'unknown'),
+                    completed_at=timezone.now()
+                )
+                
+                # Update the related object's payment status
+                # This will be handled by signals or the respective views
+                _update_payment_status(payment_type, payment_for_id, reference, 'paid')
+                
                 return Response({
                     'verified': True,
                     'reference': reference,
                     'tx_ref': transaction_data.get('tx_ref', reference),
-                    'transaction_id': transaction_data.get('id'),
-                    'amount': transaction_data.get('amount', 0),
+                    'transaction_id': transaction.transaction_id,
+                    'amount': str(gross_amount),
+                    'platform_commission': str(commission),
+                    'net_amount': str(net_amount),
                     'paid_at': transaction_data.get('created_at'),
                     'customer': transaction_data.get('customer', {}),
                     'metadata': metadata
@@ -211,4 +261,35 @@ class PaymentWebhookView(APIView):
                 logger.warning(f"Payment failed for reference: {reference}, status: {status_value}")
         
         return Response({'status': 'received'}, status=status.HTTP_200_OK)
+
+
+def _update_payment_status(payment_type: str, payment_for_id: int, reference: str, status: str):
+    """
+    Helper function to update payment status on related objects
+    """
+    try:
+        if payment_type == 'appointment':
+            from doctors.models import Appointment
+            appointment = Appointment.objects.get(id=payment_for_id)
+            appointment.payment_reference = reference
+            appointment.payment_status = status
+            appointment.save()
+        elif payment_type == 'medication_order':
+            from pharmacy.models import MedicationOrder
+            order = MedicationOrder.objects.get(id=payment_for_id)
+            order.payment_reference = reference
+            order.payment_status = status
+            order.save()
+        elif payment_type == 'virtual_session':
+            # Virtual sessions are linked to appointments
+            from doctors.models import Appointment, VirtualSession
+            try:
+                appointment = Appointment.objects.get(id=payment_for_id)
+                if hasattr(appointment, 'virtual_session'):
+                    # Update virtual session if exists
+                    pass
+            except Appointment.DoesNotExist:
+                pass
+    except Exception as e:
+        logger.error(f"Error updating payment status for {payment_type} {payment_for_id}: {e}")
 

@@ -3,6 +3,7 @@ import datetime
 import logging
 from django.conf import settings
 from rest_framework import viewsets, generics, permissions, filters, views, status
+from rest_framework import serializers
 from django.urls import reverse
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -194,6 +195,38 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         return Appointment.objects.filter(user=user)
 
     def perform_create(self, serializer):
+        # Check subscription limits before creating appointment
+        from payments.utils import user_can_book_appointment
+        from payments.models import UserSubscription
+        
+        if not user_can_book_appointment(self.request.user):
+            subscription = UserSubscription.objects.filter(
+                user=self.request.user,
+                status='active'
+            ).first()
+            
+            if subscription and subscription.is_active:
+                max_appointments = subscription.plan.max_appointments_per_month
+                limit_text = f"{max_appointments} appointments" if max_appointments else "unlimited"
+            else:
+                limit_text = "3 appointments"
+            
+            from datetime import datetime
+            from django.utils import timezone
+            month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0)
+            current_count = Appointment.objects.filter(
+                user=self.request.user,
+                created_at__gte=month_start
+            ).count()
+            
+            raise serializers.ValidationError({
+                'error': 'Appointment limit reached',
+                'message': f'You have reached your monthly appointment limit ({limit_text}). Upgrade to Premium for unlimited appointments.',
+                'current_count': current_count,
+                'limit': max_appointments if subscription and subscription.is_active else 3,
+                'upgrade_url': '/subscription'
+            })
+        
         # Handle insurance if provided
         user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
         payment_reference = serializer.validated_data.pop('payment_reference', None)
