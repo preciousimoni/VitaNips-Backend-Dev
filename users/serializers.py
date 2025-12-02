@@ -19,11 +19,11 @@ class VaccinationSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     insurance_details = UserInsuranceSerializer(
-        many=True, read_only=True, source='userinsurance_set')
+        many=True, read_only=True, source='insurance_plans')
     emergency_contacts = EmergencyContactSerializer(
-        many=True, read_only=True, source='emergencycontact_set')
+        many=True, read_only=True)
     vaccinations = VaccinationSerializer(
-        many=True, read_only=True, source='vaccination_set')
+        many=True, read_only=True)
 
     is_doctor = serializers.SerializerMethodField()
     doctor_id = serializers.SerializerMethodField()

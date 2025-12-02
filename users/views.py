@@ -29,7 +29,12 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
-        return self.request.user
+        # Prefetch related objects to avoid N+1 queries
+        return User.objects.prefetch_related(
+            'emergency_contacts',
+            'insurance_plans',  # UserInsurance related_name
+            'vaccinations'  # Vaccination related_name
+        ).get(pk=self.request.user.pk)
 
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:

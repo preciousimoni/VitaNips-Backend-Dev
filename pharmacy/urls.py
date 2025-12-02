@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     PharmacyListView, PharmacyOrderListView, PharmacyOrderDetailView,
     MedicationListView, PharmacyInventoryListView, MedicationOrderListCreateView,
-    MedicationOrderDetailView,  MedicationReminderListCreateView, MedicationReminderDetailView,
+    MedicationOrderDetailView, ConfirmPickupView, MedicationReminderListCreateView, MedicationReminderDetailView,
     CreateOrderFromPrescriptionView, PharmacyDetailView,
     MedicationLogListCreateView, LogMedicationIntakeView,
     PharmacyInventoryPortalViewSet
@@ -23,6 +23,7 @@ urlpatterns = [
     path('prescriptions/<int:prescription_id>/create_order/', CreateOrderFromPrescriptionView.as_view(), name='prescription-create-order'),
     path('orders/', MedicationOrderListCreateView.as_view(), name='medication-order-list'),
     path('orders/<int:pk>/', MedicationOrderDetailView.as_view(), name='medication-order-detail'),
+    path('orders/<int:pk>/confirm_pickup/', ConfirmPickupView.as_view(), name='medication-order-confirm-pickup'),
     path('reminders/', MedicationReminderListCreateView.as_view(), name='medication-reminder-list'),
     path('reminders/<int:pk>/', MedicationReminderDetailView.as_view(), name='medication-reminder-detail'),
     path('logs/', MedicationLogListCreateView.as_view(), name='medication-log-list'),

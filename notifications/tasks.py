@@ -5,7 +5,7 @@ from django.core.mail import EmailMultiAlternatives
 from twilio.rest import Client
 from push_notifications.models import APNSDevice, GCMDevice
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
 from .models import (
     Notification, NotificationDelivery, NotificationPreference,
     NotificationSchedule, NotificationTemplate
@@ -22,19 +22,33 @@ logger = logging.getLogger(__name__)
 def check_appointment_reminders(self):
     """Check for upcoming appointments and send reminders"""
     now = timezone.now()
+    now_date = now.date()
+    now_time = now.time()
     
     # 24-hour reminders
     tomorrow = now + timedelta(hours=24)
-    appointments_24h = Appointment.objects.filter(
+    tomorrow_date = tomorrow.date()
+    
+    # Get all confirmed appointments and filter in Python to combine date + start_time
+    all_appointments = Appointment.objects.filter(
         status='confirmed',
-        date_time__gte=now,
-        date_time__lte=tomorrow
-    ).select_related('patient', 'doctor')
+        date__gte=now_date,
+        date__lte=tomorrow_date
+    ).select_related('user', 'doctor')
+    
+    appointments_24h = []
+    for appointment in all_appointments:
+        # Combine date and start_time into a datetime
+        appointment_datetime = timezone.make_aware(
+            datetime.combine(appointment.date, appointment.start_time)
+        )
+        if now <= appointment_datetime <= tomorrow:
+            appointments_24h.append(appointment)
     
     for appointment in appointments_24h:
         # Check if reminder already sent
         existing = Notification.objects.filter(
-            recipient=appointment.patient,
+            recipient=appointment.user,
             category='appointment',
             metadata__appointment_id=appointment.id,
             metadata__reminder_type='24h',
@@ -46,15 +60,20 @@ def check_appointment_reminders(self):
     
     # 1-hour reminders
     one_hour = now + timedelta(hours=1)
-    appointments_1h = Appointment.objects.filter(
-        status='confirmed',
-        date_time__gte=now,
-        date_time__lte=one_hour
-    ).select_related('patient', 'doctor')
+    one_hour_date = one_hour.date()
+    
+    appointments_1h = []
+    for appointment in all_appointments:
+        # Combine date and start_time into a datetime
+        appointment_datetime = timezone.make_aware(
+            datetime.combine(appointment.date, appointment.start_time)
+        )
+        if now <= appointment_datetime <= one_hour:
+            appointments_1h.append(appointment)
     
     for appointment in appointments_1h:
         existing = Notification.objects.filter(
-            recipient=appointment.patient,
+            recipient=appointment.user,
             category='appointment',
             metadata__appointment_id=appointment.id,
             metadata__reminder_type='1h',
@@ -64,8 +83,8 @@ def check_appointment_reminders(self):
         if not existing:
             send_appointment_reminder.delay(appointment.id, reminder_type='1h')
     
-    logger.info(f"Checked appointment reminders: {appointments_24h.count()} 24h, {appointments_1h.count()} 1h")
-    return {'24h': appointments_24h.count(), '1h': appointments_1h.count()}
+    logger.info(f"Checked appointment reminders: {len(appointments_24h)} 24h, {len(appointments_1h)} 1h")
+    return {'24h': len(appointments_24h), '1h': len(appointments_1h)}
 
 
 @shared_task(bind=True, max_retries=3)
@@ -128,12 +147,17 @@ def send_appointment_reminder(self, appointment_id, reminder_type='24h'):
     """Send appointment reminder notification"""
     try:
         appointment = Appointment.objects.select_related(
-            'patient', 'doctor'
+            'user', 'doctor'
         ).get(id=appointment_id)
+        
+        # Combine date and start_time into a datetime
+        appointment_datetime = timezone.make_aware(
+            datetime.combine(appointment.date, appointment.start_time)
+        )
         
         # Create notification
         notification = Notification.objects.create(
-            recipient=appointment.patient,
+            recipient=appointment.user,
             title=f"Appointment Reminder - {reminder_type}",
             verb=f"Your appointment with Dr. {appointment.doctor.user.get_full_name()} is in {reminder_type}",
             level='info',
@@ -144,7 +168,7 @@ def send_appointment_reminder(self, appointment_id, reminder_type='24h'):
                 'appointment_id': appointment.id,
                 'reminder_type': reminder_type,
                 'doctor_name': appointment.doctor.user.get_full_name(),
-                'appointment_time': appointment.date_time.isoformat(),
+                'appointment_time': appointment_datetime.isoformat(),
             }
         )
         

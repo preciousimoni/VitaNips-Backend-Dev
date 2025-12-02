@@ -617,6 +617,58 @@ class MedicationOrderListCreateView(generics.ListCreateAPIView):
             order.patient_copay = coverage['patient_copay']
             order.save()
 
+class ConfirmPickupView(views.APIView):
+    """Allow patients to confirm they have picked up their order."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        """Confirm pickup - change order status from 'ready' to 'completed'."""
+        try:
+            order = MedicationOrder.objects.get(pk=pk, user=request.user)
+        except MedicationOrder.DoesNotExist:
+            return Response(
+                {"error": "Order not found or you do not have permission to access it."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Only allow confirming pickup if order is in 'ready' status
+        if order.status != 'ready':
+            return Response(
+                {"error": f"Cannot confirm pickup. Order must be in 'ready' status. Current status: {order.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Only allow for pickup orders (not delivery)
+        if order.is_delivery:
+            return Response(
+                {"error": "This is a delivery order. Pickup confirmation is not applicable."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update status to completed
+        old_status = order.status
+        order.status = 'completed'
+        order.save()
+        
+        # Send notification to pharmacy
+        try:
+            from pharmacy.models import Pharmacy
+            pharmacy = order.pharmacy
+            if pharmacy:
+                # Notify pharmacy staff (if there's a way to get pharmacy staff)
+                # For now, we'll just log it
+                logger.info(f"Order {order.id} confirmed as picked up by patient {request.user.id}")
+        except Exception as e:
+            logger.error(f"Error notifying pharmacy about pickup confirmation: {e}")
+        
+        # Return updated order
+        serializer = MedicationOrderSerializer(order)
+        return Response({
+            "message": "Pickup confirmed successfully. Order marked as completed.",
+            "order": serializer.data
+        }, status=status.HTTP_200_OK)
+
+
 class MedicationOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MedicationOrderSerializer
     permission_classes = [permissions.IsAuthenticated]

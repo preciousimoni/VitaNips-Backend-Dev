@@ -99,15 +99,25 @@ class MedicationOrderItemSerializer(serializers.ModelSerializer):
 
 class PharmacyOrderListSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
 
     class Meta:
         model = MedicationOrder
-        fields = ['id', 'patient_name', 'status', 'order_date', 'is_delivery', 'pickup_or_delivery_date', 'prescription']
+        fields = ['id', 'patient_name', 'status', 'order_date', 'is_delivery', 'pickup_or_delivery_date', 'prescription', 'total_amount', 'payment_status', 'payment_reference']
 
     def get_patient_name(self, obj):
         if obj.user:
             return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
         return "N/A"
+    
+    def get_payment_status(self, obj):
+        """Safely get payment_status, handling cases where the field doesn't exist in DB yet"""
+        try:
+            if hasattr(obj, 'payment_status'):
+                return obj.payment_status
+            return 'pending'  # Default value if field doesn't exist
+        except (AttributeError, KeyError):
+            return 'pending'
 
 class PharmacyOrderDetailSerializer(serializers.ModelSerializer):
     items = PharmacyOrderItemViewSerializer(many=True, read_only=True)
