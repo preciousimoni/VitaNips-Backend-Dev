@@ -8,9 +8,7 @@ primary_region = 'iad'
 console_command = '/app/manage.py shell'
 
 [build]
-  # Explicitly use Dockerfile - don't auto-detect build method
   dockerfile = "Dockerfile"
-  # Ignore mise and other version managers
   ignorefile = ".dockerignore"
 
 [deploy]
