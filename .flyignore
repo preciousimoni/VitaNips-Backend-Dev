@@ -1,13 +1,5 @@
-# Fly.io ignore file - prevent mise and other version managers from being detected
-.mise.toml
-.tool-versions
-.python-version
-vercel.json
-vercel-build.sh
-.vercelignore
-
-# Vercel-specific files (not needed for Fly.io)
-vercel.json
-vercel-build.sh
-.vercelignore
-
+# Prevent Fly.io from auto-detecting Django buildpack
+# Force Docker build only
+manage.py
+requirements.txt
+*.py
