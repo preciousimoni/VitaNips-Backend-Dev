@@ -1,58 +1,50 @@
-# fly.toml app configuration file generated for vitanips-backend on 2025-01-27T00:00:00Z
+# fly.toml app configuration file generated for vitanips-backend on 2025-12-03T20:23:52Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = "vitanips-backend"
-primary_region = "iad"
+app = 'vitanips-backend'
+primary_region = 'iad'
+console_command = '/code/manage.py shell'
 
 [build]
 
+[deploy]
+  release_command = 'python manage.py migrate --noinput'
+
 [env]
-  PYTHONUNBUFFERED = "1"
-  DJANGO_ENV = "production"
+  PORT = '8000'
+
+[processes]
+  app = 'daphne -b 0.0.0.0 -p 8000 vitanips.asgi'
+  celery = 'celery -A vitanips worker --loglevel=INFO'
 
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
-
-  [http_service.concurrency]
-    type = "connections"
-    hard_limit = 25
-    soft_limit = 20
-
-  [[http_service.checks]]
-    interval = "10s"
-    timeout = "2s"
-    grace_period = "5s"
-    method = "GET"
-    path = "/health/"
-    protocol = "http"
-
-[processes]
-  app = "/app/start.sh"
-  celery = "celery -A vitanips worker --loglevel=info"
-  celery_beat = "celery -A vitanips beat --loglevel=info"
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = 'shared'
   cpus = 1
   memory_mb = 512
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 256
-  processes = ["celery"]
+  memory_mb = 512
+  processes = ['celery']
 
 [[vm]]
-  cpu_kind = "shared"
+  cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 256
-  processes = ["celery_beat"]
+  memory_mb = 512
+  processes = ['celery_beat']
 
+[[statics]]
+  guest_path = '/code/static'
+  url_prefix = '/static/'
