@@ -23,9 +23,30 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-# Set GDAL environment variables for the container
-ENV GDAL_LIBRARY_PATH=/usr/lib/libgdal.so
+# Find and set GDAL/GEOS library paths dynamically
+# On Debian-based systems, libraries are typically in /usr/lib/x86_64-linux-gnu/
+RUN GDAL_LIB=$(find /usr -name "libgdal.so*" -type f 2>/dev/null | head -1) && \
+    GEOS_LIB=$(find /usr -name "libgeos_c.so*" -type f 2>/dev/null | head -1) && \
+    echo "Found GDAL library: $GDAL_LIB" && \
+    echo "Found GEOS library: $GEOS_LIB" && \
+    if [ -n "$GDAL_LIB" ]; then \
+        echo "$GDAL_LIB" > /tmp/gdal_lib_path.txt; \
+        # Create symlink in /usr/lib for compatibility if it doesn't exist \
+        if [ ! -f /usr/lib/libgdal.so ] && [ -f "$GDAL_LIB" ]; then \
+            ln -sf "$GDAL_LIB" /usr/lib/libgdal.so; \
+        fi; \
+    fi && \
+    if [ -n "$GEOS_LIB" ]; then \
+        echo "$GEOS_LIB" > /tmp/geos_lib_path.txt; \
+    fi
+
+# Set GDAL environment variables - use the actual found paths or common Debian paths
+ENV GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so
 ENV GEOS_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgeos_c.so
+
+# Verify libraries exist
+RUN ls -la /usr/lib/x86_64-linux-gnu/libgdal.so* 2>/dev/null || \
+    (echo "Warning: GDAL library not found at expected path" && find /usr -name "libgdal.so*" 2>/dev/null | head -5)
 
 # Set working directory
 WORKDIR /app

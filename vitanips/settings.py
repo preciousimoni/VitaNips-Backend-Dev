@@ -16,16 +16,27 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 # GDAL/GEOS Configuration for GeoDjango
 # Auto-detect paths based on environment
 import os
-if os.path.exists('/usr/lib/libgdal.so'):  # Linux (Docker/fly.io)
-    GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so'
-    GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so'
-elif os.path.exists('/opt/homebrew/Cellar/gdal'):  # macOS Homebrew
-    GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.11.4_1/lib/libgdal.37.dylib'
-    GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.0/lib/libgeos_c.dylib'
-else:
-    # Try to use environment variables if set
-    GDAL_LIBRARY_PATH = os.environ.get('GDAL_LIBRARY_PATH', '')
-    GEOS_LIBRARY_PATH = os.environ.get('GEOS_LIBRARY_PATH', '')
+
+# Priority order: environment variables > common Debian paths > macOS > fallback
+GDAL_LIBRARY_PATH = os.environ.get('GDAL_LIBRARY_PATH', '')
+GEOS_LIBRARY_PATH = os.environ.get('GEOS_LIBRARY_PATH', '')
+
+# If not set via environment, try common paths
+if not GDAL_LIBRARY_PATH or not os.path.exists(GDAL_LIBRARY_PATH):
+    # Check common Debian/Ubuntu paths first (most common in Docker containers)
+    if os.path.exists('/usr/lib/x86_64-linux-gnu/libgdal.so'):
+        GDAL_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgdal.so'
+    elif os.path.exists('/usr/lib/libgdal.so'):  # Fallback for other Linux systems
+        GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so'
+    elif os.path.exists('/opt/homebrew/Cellar/gdal'):  # macOS Homebrew
+        GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.11.4_1/lib/libgdal.37.dylib'
+
+if not GEOS_LIBRARY_PATH or not os.path.exists(GEOS_LIBRARY_PATH):
+    # Check common Debian/Ubuntu paths first
+    if os.path.exists('/usr/lib/x86_64-linux-gnu/libgeos_c.so'):
+        GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so'
+    elif os.path.exists('/opt/homebrew/Cellar/geos'):  # macOS Homebrew
+        GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.0/lib/libgeos_c.dylib'
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
