@@ -33,9 +33,18 @@ WORKDIR /app
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Check system GDAL version to ensure compatibility
+RUN echo "System GDAL version:" && gdal-config --version
+
+# Install Python dependencies (GDAL will be installed separately)
+RUN pip install --upgrade pip setuptools wheel
+
+# Install GDAL Python bindings with exact version matching system libgdal (3.10.3)
+# This must match the system libgdal version exactly
+RUN pip install --no-cache-dir "GDAL==3.10.3"
+
+# Install remaining Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
