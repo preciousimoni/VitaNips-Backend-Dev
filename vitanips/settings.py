@@ -14,9 +14,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # GDAL/GEOS Configuration for GeoDjango
-# These paths are for macOS with Homebrew installations
-GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.11.4_1/lib/libgdal.37.dylib'
-GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.0/lib/libgeos_c.dylib'
+# Auto-detect paths based on environment
+import os
+if os.path.exists('/usr/lib/libgdal.so'):  # Linux (Docker/fly.io)
+    GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so'
+    GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so'
+elif os.path.exists('/opt/homebrew/Cellar/gdal'):  # macOS Homebrew
+    GDAL_LIBRARY_PATH = '/opt/homebrew/Cellar/gdal/3.11.4_1/lib/libgdal.37.dylib'
+    GEOS_LIBRARY_PATH = '/opt/homebrew/Cellar/geos/3.14.0/lib/libgeos_c.dylib'
+else:
+    # Try to use environment variables if set
+    GDAL_LIBRARY_PATH = os.environ.get('GDAL_LIBRARY_PATH', '')
+    GEOS_LIBRARY_PATH = os.environ.get('GEOS_LIBRARY_PATH', '')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
@@ -28,7 +37,8 @@ FLUTTERWAVE_SECRET_KEY = config('FLUTTERWAVE_SECRET_KEY', default='')
 FLUTTERWAVE_PUBLIC_KEY = config('FLUTTERWAVE_PUBLIC_KEY', default='')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
-CSRF_TRUSTED_ORIGINS = ['https://vitanips.onrender.com']
+# CSRF Trusted Origins - Add your fly.io domain here
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default='https://vitanips.fly.dev')
 
 # Application definition
 INSTALLED_APPS = [

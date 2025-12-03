@@ -11,10 +11,12 @@ from drf_spectacular.views import (
 )
 
 from users.views import UserRegistrationView
+from vitanips.core.health_views import health_check
 
 app_name = 'vitanips'
 
 urlpatterns = [
+    path('health/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
     
     # API Documentation
