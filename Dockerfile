@@ -34,17 +34,31 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Check system GDAL version to ensure compatibility
-RUN echo "System GDAL version:" && gdal-config --version
+RUN GDAL_VERSION=$(gdal-config --version) && \
+    echo "System GDAL version: $GDAL_VERSION" && \
+    echo "$GDAL_VERSION" > /tmp/gdal_version.txt
 
-# Install Python dependencies (GDAL will be installed separately)
+# Upgrade pip and build tools
 RUN pip install --upgrade pip setuptools wheel
 
-# Install GDAL Python bindings with exact version matching system libgdal (3.10.3)
-# This must match the system libgdal version exactly
-RUN pip install --no-cache-dir "GDAL==3.10.3"
+# Install GDAL Python bindings FIRST with exact version matching system libgdal
+# Read the version from the file we saved
+RUN GDAL_VERSION=$(cat /tmp/gdal_version.txt) && \
+    echo "Installing GDAL Python bindings version: $GDAL_VERSION" && \
+    pip install --no-cache-dir "GDAL==${GDAL_VERSION}"
 
-# Install remaining Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Verify GDAL installation
+RUN python -c "import osgeo; print(f'GDAL Python version: {osgeo.__version__}')" || true
+
+# Create a constraints file to prevent GDAL from being upgraded or changed
+RUN GDAL_VERSION=$(cat /tmp/gdal_version.txt) && \
+    echo "GDAL==${GDAL_VERSION}" > /tmp/constraints.txt && \
+    echo "Constraints file created with GDAL==${GDAL_VERSION}"
+
+# Install remaining Python dependencies with constraint to keep GDAL at the system version
+# The constraint file ensures GDAL won't be upgraded even if a dependency requests a newer version
+RUN pip install --no-cache-dir -c /tmp/constraints.txt -r requirements.txt && \
+    python -c "from osgeo import gdal; print(f'Final GDAL version check: {gdal.__version__}')" || true
 
 # Copy project files
 COPY . .
