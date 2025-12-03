@@ -1,0 +1,12 @@
+# Ignore mise-related files
+.mise.toml
+.tool-versions
+
+# Ignore local development files
+env/
+venv/
+*.log
+db.sqlite3
+media/
+staticfiles/
+

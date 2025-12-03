@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "buildCommand": "bash vercel-build.sh",
+  "installCommand": "export MISE_SKIP=1 && export SKIP_MISE=1",
+  "builds": [
+    {
+      "src": "vitanips/wsgi.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "vitanips/wsgi.py"
+    }
+  ],
+  "env": {
+    "PYTHON_VERSION": "3.11"
+  },
+  "functions": {
+    "vitanips/wsgi.py": {
+      "runtime": "python3.11"
+    }
+  }
+}
+
