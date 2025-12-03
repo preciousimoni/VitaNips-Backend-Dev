@@ -63,6 +63,11 @@ htmlcov/
 # Fly.io
 .fly/
 
+# Version managers (prevent mise from being detected)
+.mise.toml
+.tool-versions
+.python-version
+
 # Logs
 logs/*.log*
 
