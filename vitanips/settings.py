@@ -155,9 +155,10 @@ if is_production_db and database_url:
                 engine='django.contrib.gis.db.backends.postgis',  # Ensure PostGIS engine
             )
         }
-        logger.info(f"Using production database from DATABASE_URL")
+        # Logger not yet defined, use print for now
+        print("Using production database from DATABASE_URL")
     except Exception as e:
-        logger.error(f"Error parsing DATABASE_URL: {e}")
+        print(f"Error parsing DATABASE_URL: {e}")
         raise
 elif DJANGO_ENV == 'development':
     # Development: Use local database settings
@@ -173,7 +174,7 @@ elif DJANGO_ENV == 'development':
     }
 else:
     # Fallback: Should not happen, but provide a safe default
-    logger.warning("No valid database configuration found! Using fallback.")
+    print("WARNING: No valid database configuration found! Using fallback.")
     DATABASES = {
         'default': {
             'ENGINE': 'django.contrib.gis.db.backends.postgis',
