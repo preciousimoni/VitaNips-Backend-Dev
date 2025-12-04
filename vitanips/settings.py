@@ -137,8 +137,30 @@ CHANNEL_LAYERS = {
 }
 
 # Database
-DJANGO_ENV = config('DJANGO_ENV', default='development')
-if DJANGO_ENV == 'development':
+# Prioritize DATABASE_URL - if it exists and is not localhost, use it (production)
+database_url = config('DATABASE_URL', default=None)
+is_production_db = database_url and 'localhost' not in database_url.lower() and '127.0.0.1' not in database_url.lower()
+
+# Set DJANGO_ENV based on database URL if not explicitly set
+DJANGO_ENV = config('DJANGO_ENV', default='production' if is_production_db else 'development')
+
+if is_production_db and database_url:
+    # Production: Use DATABASE_URL (Neon, Fly.io Postgres, or other external Postgres)
+    try:
+        DATABASES = {
+            'default': dj_database_url.parse(
+                database_url,
+                conn_max_age=600,
+                conn_health_checks=True,
+                engine='django.contrib.gis.db.backends.postgis',  # Ensure PostGIS engine
+            )
+        }
+        logger.info(f"Using production database from DATABASE_URL")
+    except Exception as e:
+        logger.error(f"Error parsing DATABASE_URL: {e}")
+        raise
+elif DJANGO_ENV == 'development':
+    # Development: Use local database settings
     DATABASES = {
         'default': {
             'ENGINE': 'django.contrib.gis.db.backends.postgis',
@@ -150,13 +172,17 @@ if DJANGO_ENV == 'development':
         }
     }
 else:
+    # Fallback: Should not happen, but provide a safe default
+    logger.warning("No valid database configuration found! Using fallback.")
     DATABASES = {
-        'default': dj_database_url.parse(
-            config('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
-            engine='django.contrib.gis.db.backends.postgis',  # Ensure PostGIS engine
-        )
+        'default': {
+            'ENGINE': 'django.contrib.gis.db.backends.postgis',
+            'NAME': 'vitanips',
+            'USER': 'postgres',
+            'PASSWORD': '',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
     }
 
 # Password validation
