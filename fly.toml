@@ -35,13 +35,13 @@ console_command = '/app/manage.py shell'
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512
+  memory_mb = 1024
   processes = ['app']
 
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512
+  memory_mb = 1024
   processes = ['celery']
 
 [[vm]]
