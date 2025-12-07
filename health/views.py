@@ -5,10 +5,11 @@ from rest_framework import filters
 from notifications.utils import create_notification
 from .models import VitalSign, FoodLog, ExerciseLog, SleepLog, HealthGoal, MedicalDocument, WaterIntakeLog, HealthInsight
 from .serializers import (
-    VitalSignSerializer, FoodLogSerializer,
+    VitalSignSerializer, VitalSignWithAlertsSerializer, FoodLogSerializer,
     ExerciseLogSerializer, SleepLogSerializer, HealthGoalSerializer, MedicalDocumentSerializer,
     WaterIntakeLogSerializer, HealthInsightSerializer
 )
+
 from .permissions import IsOwnerOrSharedWith
 from .services import HealthAnalyticsService
 
@@ -77,6 +78,35 @@ class VitalSignLatestView(generics.RetrieveAPIView):
 
     def get_object(self):
         return VitalSign.objects.filter(user=self.request.user).order_by('-date_recorded').first()
+
+
+class PatientVitalSignsView(generics.ListAPIView):
+    """
+    Endpoint for doctors to view a patient's vital signs.
+    GET /api/health/patients/<user_id>/vital-signs/
+    Query params:
+        - days: Number of days to look back (default: 30)
+    """
+    serializer_class = VitalSignWithAlertsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        
+        # Check if user is a doctor
+        if not hasattr(self.request.user, 'doctor_profile'):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only doctors can view patient vitals.")
+        
+        user_id = self.kwargs.get('user_id')
+        days = int(self.request.query_params.get('days', 30))
+        cutoff_date = timezone.now() - timedelta(days=days)
+        
+        return VitalSign.objects.filter(
+            user_id=user_id,
+            date_recorded__gte=cutoff_date
+        ).order_by('-date_recorded')
 
 class FoodLogListCreateView(generics.ListCreateAPIView):
     serializer_class = FoodLogSerializer

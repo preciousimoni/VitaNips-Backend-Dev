@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    VitalSignListCreateView, VitalSignDetailView, VitalSignLatestView,
+    VitalSignListCreateView, VitalSignDetailView, VitalSignLatestView, PatientVitalSignsView,
     FoodLogListCreateView, FoodLogDetailView,
     ExerciseLogListCreateView, ExerciseLogDetailView,
     SleepLogListCreateView, SleepLogDetailView,
@@ -19,6 +19,7 @@ urlpatterns = [
     path('vital-signs/', VitalSignListCreateView.as_view(), name='vital-sign-list'),
     path('vital-signs/latest/', VitalSignLatestView.as_view(), name='vital-sign-latest'),
     path('vital-signs/<int:pk>/', VitalSignDetailView.as_view(), name='vital-sign-detail'),
+    path('patients/<int:user_id>/vital-signs/', PatientVitalSignsView.as_view(), name='patient-vital-signs'),
     
     path('food-logs/', FoodLogListCreateView.as_view(), name='food-log-list'),
     path('food-logs/<int:pk>/', FoodLogDetailView.as_view(), name='food-log-detail'),

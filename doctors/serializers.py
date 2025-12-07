@@ -398,13 +398,14 @@ class DoctorEligibleAppointmentSerializer(serializers.ModelSerializer):
     patient_email = serializers.EmailField(source='user.email', read_only=True)
     patient_name = serializers.SerializerMethodField(read_only=True)
     has_existing_prescription = serializers.SerializerMethodField(read_only=True)
+    patient_vitals_summary = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Appointment
         fields = [
             'id', 'date', 'start_time', 'end_time', 'reason', 'status',
             'user', 'patient_email', 'patient_name',
-            'has_existing_prescription'
+            'has_existing_prescription', 'patient_vitals_summary'
         ]
 
     def get_patient_name(self, obj):
@@ -414,6 +415,11 @@ class DoctorEligibleAppointmentSerializer(serializers.ModelSerializer):
 
     def get_has_existing_prescription(self, obj):
         return Prescription.objects.filter(appointment=obj).exists()
+    
+    def get_patient_vitals_summary(self, obj):
+        """Get summary of patient's recent vitals (last 7 days)"""
+        from health.vitals_utils import get_vitals_summary
+        return get_vitals_summary(obj.user.id, days=7)
 
 class PrescriptionItemSerializer(serializers.ModelSerializer):
     # Move the medication serializer import inside the to_representation method

@@ -12,6 +12,22 @@ class VitalSignSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['user', 'created_at']
 
+
+class VitalSignWithAlertsSerializer(VitalSignSerializer):
+    """
+    Extended serializer that includes alerts for abnormal vital signs.
+    Used when doctors view patient vitals.
+    """
+    alerts = serializers.SerializerMethodField()
+    
+    class Meta(VitalSignSerializer.Meta):
+        fields = VitalSignSerializer.Meta.fields + ['alerts']
+    
+    def get_alerts(self, obj):
+        from .vitals_utils import analyze_vital_signs
+        return analyze_vital_signs(obj)
+
+
 class FoodLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = FoodLog
