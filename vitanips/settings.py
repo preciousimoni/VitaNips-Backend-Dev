@@ -48,6 +48,9 @@ FLUTTERWAVE_SECRET_KEY = config('FLUTTERWAVE_SECRET_KEY', default='')
 FLUTTERWAVE_PUBLIC_KEY = config('FLUTTERWAVE_PUBLIC_KEY', default='')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
+# Freemium Configuration
+FREEMIUM_APPOINTMENT_LIMIT = config('FREEMIUM_APPOINTMENT_LIMIT', default=3, cast=int)
+
 # CSRF Trusted Origins - Add your fly.io domain here
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv(), default='https://vitanips-backend.fly.dev,https://vitanips.fly.dev')
 

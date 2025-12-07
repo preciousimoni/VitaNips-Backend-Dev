@@ -1,11 +1,12 @@
 from django.contrib import admin
 from .models import Pharmacy, Medication, PharmacyInventory, MedicationOrder, MedicationOrderItem, MedicationReminder, MedicationLog
+from payments.models import PharmacySubscription, PharmacySubscriptionRecord
 
 @admin.register(Pharmacy)
 class PharmacyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'phone_number', 'email', 'is_24_hours', 'offers_delivery', 'is_active', 'created_at')
+    list_display = ('name', 'phone_number', 'email', 'is_24_hours', 'offers_delivery', 'is_active', 'subscription_expiry', 'created_at')
     search_fields = ('name', 'address', 'phone_number', 'email')
-    list_filter = ('is_24_hours', 'offers_delivery', 'is_active', 'created_at')
+    list_filter = ('is_24_hours', 'offers_delivery', 'is_active', 'subscription_expiry', 'created_at')
     ordering = ('-created_at',)
     readonly_fields = ('created_at', 'updated_at')
     fieldsets = (
@@ -14,6 +15,10 @@ class PharmacyAdmin(admin.ModelAdmin):
         }),
         ('Services', {
             'fields': ('is_24_hours', 'offers_delivery', 'is_active')
+        }),
+        ('Payment & Subscription', {
+            'fields': ('subaccount_id', 'bank_account_details', 'commission_rate', 'subscription_expiry'),
+            'classes': ('collapse',)
         }),
         ('Location', {
             'fields': ('location',),
@@ -86,9 +91,10 @@ class MedicationOrderItemAdmin(admin.ModelAdmin):
     search_fields = ('medication_name_text', 'dosage_text', 'order__user__email')
     list_filter = ('order__status', 'order__order_date')
     ordering = ('-order__order_date',)
+    readonly_fields = ('total_price',)
     fieldsets = (
         ('Item Details', {
-            'fields': ('order', 'prescription_item', 'medication_name_text', 'dosage_text', 'quantity', 'price_per_unit')
+            'fields': ('order', 'prescription_item', 'medication_name_text', 'dosage_text', 'quantity', 'price_per_unit', 'total_price')
         }),
     )
 
@@ -125,6 +131,57 @@ class MedicationLogAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Log Details', {
             'fields': ('reminder', 'scheduled_time', 'taken_at', 'status', 'notes')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+@admin.register(PharmacySubscription)
+class PharmacySubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('name', 'tier', 'annual_price', 'is_active', 'created_at')
+    search_fields = ('name', 'tier', 'description')
+    list_filter = ('tier', 'is_active', 'created_at')
+    ordering = ('annual_price',)
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('Plan Information', {
+            'fields': ('name', 'tier', 'description', 'is_active')
+        }),
+        ('Pricing', {
+            'fields': ('annual_price',)
+        }),
+        ('Features', {
+            'fields': ('features',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+@admin.register(PharmacySubscriptionRecord)
+class PharmacySubscriptionRecordAdmin(admin.ModelAdmin):
+    list_display = ('pharmacy', 'plan', 'status', 'current_period_start', 'current_period_end', 'auto_renew', 'created_at')
+    search_fields = ('pharmacy__name', 'plan__name', 'payment_reference')
+    list_filter = ('status', 'auto_renew', 'created_at')
+    ordering = ('-created_at',)
+    readonly_fields = ('created_at', 'updated_at', 'is_active')
+    fieldsets = (
+        ('Subscription Details', {
+            'fields': ('pharmacy', 'plan', 'status', 'auto_renew')
+        }),
+        ('Period Information', {
+            'fields': ('current_period_start', 'current_period_end')
+        }),
+        ('Payment', {
+            'fields': ('payment_reference',)
+        }),
+        ('Computed Fields', {
+            'fields': ('is_active',),
+            'classes': ('collapse',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

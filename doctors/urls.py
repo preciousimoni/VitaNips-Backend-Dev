@@ -9,7 +9,7 @@ from .views import (
     AppointmentListCreateView, AppointmentDetailView,
     PrescriptionListView, PrescriptionDetailView, ForwardPrescriptionView,
     GetTwilioTokenView, DoctorEligibleAppointmentListView,
-    DoctorPrescriptionViewSet, DoctorApplicationView,
+    DoctorPrescriptionViewSet, DoctorApplicationView, DoctorBankDetailsView, DoctorVerifyBankAccountView,
 )
 from .video_views import (
     GenerateVideoTokenView, EndVideoSessionView,
@@ -46,6 +46,8 @@ urlpatterns = [
     # Doctor Portal endpoints
     path('portal/eligible-appointments-for-prescription/', DoctorEligibleAppointmentListView.as_view(), name='doctor-eligible-appointments'),
     path('portal/application/', DoctorApplicationView.as_view(), name='doctor-application'),
+    path('portal/onboarding/bank/', DoctorBankDetailsView.as_view(), name='doctor-bank-details'),
+    path('portal/verify-account/', DoctorVerifyBankAccountView.as_view(), name='doctor-verify-account'),
     
     path('<int:doctor_id>/eligible-appointments/', DoctorEligibleAppointmentListView.as_view(), name='doctor-eligible-appointments-legacy'),
     path('', include(router.urls)),

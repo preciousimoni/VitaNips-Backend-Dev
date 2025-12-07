@@ -14,6 +14,13 @@ class Pharmacy(models.Model):
     is_24_hours = models.BooleanField(default=False)
     offers_delivery = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True, help_text="Is the pharmacy currently operational and accepting orders?")
+    
+    # Payment & Subscription Fields
+    subaccount_id = models.CharField(max_length=100, blank=True, null=True, help_text="Flutterwave Subaccount ID for split payments")
+    bank_account_details = models.JSONField(default=dict, blank=True, help_text="Bank account details")
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=5.00, help_text="Platform commission percentage for this pharmacy")
+    subscription_expiry = models.DateField(null=True, blank=True, help_text="Date when the pharmacy's registration expires")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

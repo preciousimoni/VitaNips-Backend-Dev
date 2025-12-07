@@ -219,25 +219,158 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
             
             if subscription and subscription.is_active:
                 max_appointments = subscription.plan.max_appointments_per_month
-                limit_text = f"{max_appointments} appointments" if max_appointments else "unlimited"
+                limit_text = f"{max_appointments} appointments/month" if max_appointments else "unlimited"
+                
+                # Check monthly limit for premium
+                from datetime import datetime
+                from django.utils import timezone
+                month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0)
+                current_count = Appointment.objects.filter(
+                    user=self.request.user,
+                    created_at__gte=month_start,
+                    status__in=['scheduled', 'confirmed', 'completed']
+                ).count()
+                limit_val = max_appointments
             else:
-                limit_text = "3 appointments"
-            
-            from datetime import datetime
-            from django.utils import timezone
-            month_start = timezone.now().replace(day=1, hour=0, minute=0, second=0)
-            current_count = Appointment.objects.filter(
-                user=self.request.user,
-                created_at__gte=month_start
-            ).count()
+                from django.conf import settings
+                free_limit = getattr(settings, 'FREEMIUM_APPOINTMENT_LIMIT', 3)
+                limit_text = f"{free_limit} free lifetime appointments"
+                # Check lifetime limit for free tier
+                current_count = Appointment.objects.filter(
+                    user=self.request.user,
+                    status__in=['scheduled', 'confirmed', 'completed']
+                ).count()
+                limit_val = free_limit
             
             raise serializers.ValidationError({
                 'error': 'Appointment limit reached',
-                'message': f'You have reached your monthly appointment limit ({limit_text}). Upgrade to Premium for unlimited appointments.',
+                'message': f'You have reached your appointment limit ({limit_text}). Upgrade to Premium for unlimited appointments.',
                 'current_count': current_count,
-                'limit': max_appointments if subscription and subscription.is_active else 3,
+                'limit': limit_val,
                 'upgrade_url': '/subscription'
             })
+
+class DoctorBankDetailsView(views.APIView):
+    """
+    View for doctors to submit and view bank details.
+    GET /api/doctors/portal/onboarding/bank/ - View existing bank details
+    POST /api/doctors/portal/onboarding/bank/ - Submit/update bank details
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+
+    def get(self, request, *args, **kwargs):
+        """Get existing bank details for the doctor."""
+        doctor = request.user.doctor_profile
+        
+        if doctor.bank_account_details and doctor.subaccount_id:
+            return Response({
+                'has_bank_details': True,
+                'bank_details': doctor.bank_account_details,
+                'subaccount_id': doctor.subaccount_id,
+                'commission_rate': float(doctor.commission_rate)
+            })
+        else:
+            return Response({
+                'has_bank_details': False,
+                'message': 'No bank details found. Please add your bank account.'
+            })
+
+    def post(self, request, *args, **kwargs):
+        doctor = request.user.doctor_profile
+        
+        # Validate input
+        account_bank = request.data.get('account_bank') # Bank Code (e.g., '044')
+        account_number = request.data.get('account_number')
+        
+        if not account_bank or not account_number:
+            return Response(
+                {'error': 'Bank code and account number are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify account name with Flutterwave
+        from payments.utils import verify_bank_account
+        
+        verification_result = verify_bank_account(account_number, account_bank)
+        
+        if not verification_result or verification_result.get('status') != 'success':
+            return Response(
+                {'error': 'Failed to verify bank account. Please check your account number and bank.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        account_name = verification_result.get('data', {}).get('account_name', 'Unknown')
+            
+        # Create subaccount on Flutterwave
+        from payments.utils import create_flutterwave_subaccount
+        
+        business_name = f"Dr. {doctor.first_name} {doctor.last_name}"
+        business_email = doctor.user.email
+        business_mobile = doctor.user.phone_number or "0000000000"
+        
+        response = create_flutterwave_subaccount(
+            account_bank=account_bank,
+            account_number=account_number,
+            business_name=business_name,
+            business_email=business_email,
+            business_contact_mobile=business_mobile,
+            business_mobile=business_mobile,
+            split_value=float(1 - (doctor.commission_rate / 100)) # Doctor gets (100 - commission)%
+        )
+        
+        if response and response.get('status') == 'success':
+            data = response.get('data', {})
+            doctor.subaccount_id = data.get('subaccount_id')
+            doctor.bank_account_details = {
+                'bank_code': account_bank,
+                'account_number': account_number,
+                'bank_name': data.get('bank_name', 'Unknown Bank'),
+                'account_name': account_name
+            }
+            doctor.save()
+            
+            return Response({
+                'message': 'Bank details updated and subaccount created successfully.',
+                'subaccount_id': doctor.subaccount_id,
+                'account_name': account_name,
+                'bank_details': doctor.bank_account_details
+            })
+        else:
+            return Response(
+                {'error': 'Failed to create subaccount. Please check your bank details.', 'details': response},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class DoctorVerifyBankAccountView(views.APIView):
+    """
+    Verify bank account details in real-time for doctors.
+    POST /api/doctors/portal/verify-account/
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+
+    def post(self, request, *args, **kwargs):
+        account_number = request.data.get('account_number')
+        account_bank = request.data.get('account_bank')
+        
+        if not account_number or not account_bank:
+            return Response(
+                {'error': 'Account number and bank code are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify account with Flutterwave
+        from payments.utils import verify_bank_account
+        
+        result = verify_bank_account(account_number, account_bank)
+        
+        if result:
+            return Response(result)
+        else:
+            return Response(
+                {'status': 'error', 'message': 'Failed to verify account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         
         # Handle insurance if provided
         user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)

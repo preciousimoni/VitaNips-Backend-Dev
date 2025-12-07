@@ -425,10 +425,18 @@ class CreateOrderFromPrescriptionView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # --- Validation 3: Check if Pharmacy is Active ---
+        # --- Validation 3: Check if Pharmacy is Active and Subscribed ---
         if not pharmacy.is_active:
             return Response(
                 {"error": f"The selected pharmacy '{pharmacy.name}' is currently inactive and cannot accept orders."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # Check subscription expiry
+        from django.utils import timezone
+        if pharmacy.subscription_expiry and pharmacy.subscription_expiry < timezone.now().date():
+             return Response(
+                {"error": f"The selected pharmacy '{pharmacy.name}' has an expired registration and cannot accept orders."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         # --- End Validation 3 ---
@@ -552,6 +560,10 @@ class CreateOrderFromPrescriptionView(views.APIView):
             )
 
 class MedicationOrderListCreateView(generics.ListCreateAPIView):
+    """
+    List user's orders or create a new one.
+    NOTE: Creation is restricted to require a valid prescription.
+    """
     serializer_class = MedicationOrderSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -559,6 +571,13 @@ class MedicationOrderListCreateView(generics.ListCreateAPIView):
         return MedicationOrder.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
+        # Enforce prescription requirement
+        prescription = serializer.validated_data.get('prescription')
+        if not prescription:
+            raise ValidationError(
+                {"prescription": "Direct order creation is not allowed. You must provide a valid prescription."}
+            )
+            
         # Handle insurance if provided
         user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
         user_insurance = None
@@ -616,6 +635,142 @@ class MedicationOrderListCreateView(generics.ListCreateAPIView):
             order.insurance_covered_amount = coverage['covered_amount']
             order.patient_copay = coverage['patient_copay']
             order.save()
+
+
+class PharmacyBankDetailsView(views.APIView):
+    """
+    View for pharmacy staff to submit and view bank details.
+    GET /api/pharmacy/portal/onboarding/bank/ - View existing bank details
+    POST /api/pharmacy/portal/onboarding/bank/ - Submit/update bank details
+    """
+    permission_classes = [permissions.IsAuthenticated, IsPharmacyStaffOfOrderPharmacy]
+
+    def get(self, request, *args, **kwargs):
+        """Get existing bank details for the pharmacy."""
+        if not hasattr(request.user, 'works_at_pharmacy') or not request.user.works_at_pharmacy:
+            return Response(
+                {'error': 'You must be assigned to a pharmacy to perform this action.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        pharmacy = request.user.works_at_pharmacy
+        
+        if pharmacy.bank_account_details and pharmacy.subaccount_id:
+            return Response({
+                'has_bank_details': True,
+                'bank_details': pharmacy.bank_account_details,
+                'subaccount_id': pharmacy.subaccount_id,
+                'commission_rate': float(pharmacy.commission_rate)
+            })
+        else:
+            return Response({
+                'has_bank_details': False,
+                'message': 'No bank details found. Please add your bank account.'
+            })
+
+    def post(self, request, *args, **kwargs):
+        # Get the pharmacy the user works for
+        if not hasattr(request.user, 'works_at_pharmacy') or not request.user.works_at_pharmacy:
+             return Response(
+                {'error': 'You must be assigned to a pharmacy to perform this action.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        pharmacy = request.user.works_at_pharmacy
+        
+        # Validate input
+        account_bank = request.data.get('account_bank') # Bank Code
+        account_number = request.data.get('account_number')
+        
+        if not account_bank or not account_number:
+            return Response(
+                {'error': 'Bank code and account number are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify account name with Flutterwave
+        from payments.utils import verify_bank_account
+        
+        verification_result = verify_bank_account(account_number, account_bank)
+        
+        if not verification_result or verification_result.get('status') != 'success':
+            return Response(
+                {'error': 'Failed to verify bank account. Please check your account number and bank.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        account_name = verification_result.get('data', {}).get('account_name', 'Unknown')
+            
+        # Create subaccount on Flutterwave
+        from payments.utils import create_flutterwave_subaccount
+        
+        business_name = pharmacy.name
+        business_email = pharmacy.email or request.user.email
+        business_mobile = pharmacy.phone_number or "0000000000"
+        
+        response = create_flutterwave_subaccount(
+            account_bank=account_bank,
+            account_number=account_number,
+            business_name=business_name,
+            business_email=business_email,
+            business_contact_mobile=business_mobile,
+            business_mobile=business_mobile,
+            split_value=float(1 - (pharmacy.commission_rate / 100)) # Pharmacy gets (100 - commission)%
+        )
+        
+        if response and response.get('status') == 'success':
+            data = response.get('data', {})
+            pharmacy.subaccount_id = data.get('subaccount_id')
+            pharmacy.bank_account_details = {
+                'bank_code': account_bank,
+                'account_number': account_number,
+                'bank_name': data.get('bank_name', 'Unknown Bank'),
+                'account_name': account_name
+            }
+            pharmacy.save()
+            
+            return Response({
+                'message': 'Bank details updated and subaccount created successfully.',
+                'subaccount_id': pharmacy.subaccount_id,
+                'account_name': account_name,
+                'bank_details': pharmacy.bank_account_details
+            })
+        else:
+            return Response(
+                {'error': 'Failed to create subaccount. Please check your bank details.', 'details': response},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class VerifyBankAccountView(views.APIView):
+    """
+    Verify bank account details in real-time.
+    POST /api/pharmacy/portal/verify-account/
+    """
+    permission_classes = [permissions.IsAuthenticated, IsPharmacyStaffOfOrderPharmacy]
+
+    def post(self, request, *args, **kwargs):
+        account_number = request.data.get('account_number')
+        account_bank = request.data.get('account_bank')
+        
+        if not account_number or not account_bank:
+            return Response(
+                {'error': 'Account number and bank code are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify account with Flutterwave
+        from payments.utils import verify_bank_account
+        
+        result = verify_bank_account(account_number, account_bank)
+        
+        if result:
+            return Response(result)
+        else:
+            return Response(
+                {'status': 'error', 'message': 'Failed to verify account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 
 class ConfirmPickupView(views.APIView):
     """Allow patients to confirm they have picked up their order."""

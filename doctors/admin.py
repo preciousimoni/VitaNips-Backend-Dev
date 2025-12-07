@@ -8,7 +8,7 @@ class SpecialtyAdmin(admin.ModelAdmin):
 
 @admin.register(Doctor)
 class DoctorAdmin(admin.ModelAdmin):
-    list_display = ('full_name', 'user', 'gender', 'years_of_experience', 'consultation_fee', 'is_verified', 'application_status', 'is_available_for_virtual', 'created_at')
+    list_display = ('full_name', 'user', 'gender', 'years_of_experience', 'consultation_fee', 'commission_rate', 'is_verified', 'application_status', 'is_available_for_virtual', 'created_at')
     search_fields = ('first_name', 'last_name', 'bio', 'license_number', 'hospital_name', 'user__email')
     list_filter = ('is_verified', 'is_available_for_virtual', 'application_status', 'gender', 'created_at')
     ordering = ('-created_at',)
@@ -24,6 +24,10 @@ class DoctorAdmin(admin.ModelAdmin):
         }),
         ('Verification Status', {
             'fields': ('is_verified', 'application_status')
+        }),
+        ('Payment & Commission', {
+            'fields': ('subaccount_id', 'bank_account_details', 'commission_rate'),
+            'classes': ('collapse',)
         }),
         ('License Information', {
             'fields': ('license_number', 'license_issuing_authority', 'license_expiry_date'),

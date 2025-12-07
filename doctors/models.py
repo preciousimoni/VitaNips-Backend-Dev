@@ -45,6 +45,11 @@ class Doctor(models.Model):
     is_available_for_virtual = models.BooleanField(default=True)
     is_verified = models.BooleanField(default=False)
     
+    # Payment & Commission Fields
+    subaccount_id = models.CharField(max_length=100, blank=True, null=True, help_text="Flutterwave Subaccount ID for split payments")
+    bank_account_details = models.JSONField(default=dict, blank=True, help_text="Bank account details (bank_code, account_number, etc.)")
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('10.00'), help_text="Platform commission percentage for this doctor")
+    
     # Application fields
     application_status = models.CharField(
         max_length=20,

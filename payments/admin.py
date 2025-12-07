@@ -111,7 +111,7 @@ class DoctorSubscriptionRecordAdmin(admin.ModelAdmin):
 
 @admin.register(Transaction)
 class TransactionAdmin(admin.ModelAdmin):
-    list_display = ('transaction_id', 'user', 'transaction_type', 'gross_amount', 'platform_commission', 'net_amount', 'status', 'payment_gateway', 'created_at', 'completed_at')
+    list_display = ('transaction_id', 'user', 'transaction_type', 'gross_amount', 'platform_commission', 'net_amount', 'status', 'payment_gateway', 'currency', 'created_at', 'completed_at')
     search_fields = ('transaction_id', 'reference', 'user__email', 'payment_method')
     list_filter = ('transaction_type', 'status', 'payment_gateway', 'currency', 'created_at', 'completed_at')
     ordering = ('-created_at',)

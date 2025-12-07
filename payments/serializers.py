@@ -5,6 +5,8 @@ from .models import (
     UserSubscription,
     DoctorSubscription,
     DoctorSubscriptionRecord,
+    PharmacySubscription,
+    PharmacySubscriptionRecord,
     Transaction
 )
 
@@ -51,4 +53,23 @@ class TransactionSerializer(serializers.ModelSerializer):
             'currency', 'created_at', 'completed_at'
         ]
         read_only_fields = ['transaction_id', 'created_at', 'completed_at']
+
+
+class PharmacySubscriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PharmacySubscription
+        fields = '__all__'
+
+
+class PharmacySubscriptionRecordSerializer(serializers.ModelSerializer):
+    plan = PharmacySubscriptionSerializer(read_only=True)
+    is_active = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = PharmacySubscriptionRecord
+        fields = [
+            'id', 'plan', 'status',
+            'current_period_start', 'current_period_end',
+            'auto_renew', 'is_active'
+        ]
 

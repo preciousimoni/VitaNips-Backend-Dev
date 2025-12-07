@@ -6,7 +6,9 @@ from .subscription_views import (
     UserSubscriptionView,
     SubscribeView,
     CancelSubscriptionView,
-    CheckSubscriptionStatusView
+    CheckSubscriptionStatusView,
+    PharmacySubscriptionView,
+    ActivatePharmacySubscriptionView
 )
 from .premium_feature_views import (
     PremiumFeaturesListView,
@@ -28,6 +30,8 @@ urlpatterns = [
     path('subscriptions/subscribe/', SubscribeView.as_view(), name='subscribe'),
     path('subscriptions/cancel/', CancelSubscriptionView.as_view(), name='cancel-subscription'),
     path('subscriptions/status/', CheckSubscriptionStatusView.as_view(), name='subscription-status'),
+    path('subscriptions/pharmacy/', PharmacySubscriptionView.as_view(), name='pharmacy-subscription'),
+    path('subscriptions/pharmacy/activate/', ActivatePharmacySubscriptionView.as_view(), name='activate-pharmacy-subscription'),
     
     # Premium feature endpoints
     path('premium-features/', PremiumFeaturesListView.as_view(), name='premium-features-list'),

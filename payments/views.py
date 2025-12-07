@@ -88,15 +88,59 @@ class InitializePaymentView(APIView):
             if hasattr(request.user, 'first_name') and hasattr(request.user, 'last_name'):
                 customer_name = f"{request.user.first_name} {request.user.last_name}".strip()
             
-            # Initialize payment with Flutterwave
-            result = flutterwave_service.initialize_transaction(
-                email=email,
-                amount=amount,
-                reference=reference,
-                callback_url=callback_url,
-                metadata=metadata,
-                customer_name=customer_name
-            )
+            # Check for split payment
+            subaccount_id = None
+            commission_rate = None
+            
+            if payment_type == 'appointment':
+                from doctors.models import Appointment
+                try:
+                    appointment = Appointment.objects.get(id=payment_for_id)
+                    if appointment.doctor and appointment.doctor.subaccount_id:
+                        subaccount_id = appointment.doctor.subaccount_id
+                        commission_rate = appointment.doctor.commission_rate
+                except Appointment.DoesNotExist:
+                    pass
+            elif payment_type == 'medication_order':
+                from pharmacy.models import MedicationOrder
+                try:
+                    order = MedicationOrder.objects.get(id=payment_for_id)
+                    if order.pharmacy and order.pharmacy.subaccount_id:
+                        subaccount_id = order.pharmacy.subaccount_id
+                        commission_rate = order.pharmacy.commission_rate
+                except MedicationOrder.DoesNotExist:
+                    pass
+            
+            if subaccount_id:
+                # Use split payment
+                from .utils import initiate_split_payment
+                
+                # Calculate split
+                # Platform commission is taken from the total amount
+                # If commission_rate is 10%, platform takes 10%, provider gets 90%
+                # Flutterwave split logic: transaction_charge is platform fee?
+                # initiate_split_payment handles the logic
+                
+                result = initiate_split_payment(
+                    email=email,
+                    amount=float(amount),
+                    reference=reference,
+                    subaccount_id=subaccount_id,
+                    commission_percentage=float(commission_rate) if commission_rate else 10.0, # Default 10%
+                    callback_url=callback_url,
+                    metadata=metadata,
+                    customer_name=customer_name
+                )
+            else:
+                # Standard payment (platform takes all)
+                result = flutterwave_service.initialize_transaction(
+                    email=email,
+                    amount=amount,
+                    reference=reference,
+                    callback_url=callback_url,
+                    metadata=metadata,
+                    customer_name=customer_name
+                )
             
             if result.get('status') == 'success':
                 # Calculate commission breakdown for display
@@ -175,10 +219,38 @@ class VerifyPaymentView(APIView):
                 gross_amount = Decimal(str(transaction_data.get('amount', 0)))
                 
                 # Calculate commission
+                # Calculate commission
+                commission_rate = None
+                
                 if payment_type == 'appointment':
-                    commission, net_amount = calculate_appointment_commission(gross_amount)
+                    from doctors.models import Appointment
+                    try:
+                        appointment = Appointment.objects.get(id=payment_for_id)
+                        if appointment.doctor:
+                            commission_rate = appointment.doctor.commission_rate
+                    except Appointment.DoesNotExist:
+                        pass
+                    
+                    if commission_rate is not None:
+                        commission = gross_amount * (commission_rate / Decimal('100.0'))
+                        net_amount = gross_amount - commission
+                    else:
+                        commission, net_amount = calculate_appointment_commission(gross_amount)
+                        
                 elif payment_type == 'medication_order':
-                    commission, net_amount = calculate_medication_order_commission(gross_amount)
+                    from pharmacy.models import MedicationOrder
+                    try:
+                        order = MedicationOrder.objects.get(id=payment_for_id)
+                        if order.pharmacy:
+                            commission_rate = order.pharmacy.commission_rate
+                    except MedicationOrder.DoesNotExist:
+                        pass
+                        
+                    if commission_rate is not None:
+                        commission = gross_amount * (commission_rate / Decimal('100.0'))
+                        net_amount = gross_amount - commission
+                    else:
+                        commission, net_amount = calculate_medication_order_commission(gross_amount)
                 elif payment_type == 'virtual_session':
                     commission, net_amount = calculate_virtual_session_commission(gross_amount, use_flat_fee=True)
                 else:
@@ -289,6 +361,26 @@ def _update_payment_status(payment_type: str, payment_for_id: int, reference: st
                     # Update virtual session if exists
                     pass
             except Appointment.DoesNotExist:
+                pass
+        elif payment_type == 'pharmacy_subscription':
+            from payments.models import PharmacySubscriptionRecord
+            try:
+                # payment_for_id is subscription_id
+                subscription = PharmacySubscriptionRecord.objects.get(id=payment_for_id)
+                subscription.payment_reference = reference
+                
+                if status == 'paid':
+                    subscription.status = 'active'
+                    subscription.save()
+                    
+                    # Update pharmacy expiry
+                    pharmacy = subscription.pharmacy
+                    pharmacy.subscription_expiry = subscription.current_period_end
+                    pharmacy.save()
+                else:
+                    subscription.status = 'cancelled' # Or failed
+                    subscription.save()
+            except PharmacySubscriptionRecord.DoesNotExist:
                 pass
     except Exception as e:
         logger.error(f"Error updating payment status for {payment_type} {payment_for_id}: {e}")

@@ -7,7 +7,7 @@ from .views import (
     MedicationOrderDetailView, ConfirmPickupView, MedicationReminderListCreateView, MedicationReminderDetailView,
     CreateOrderFromPrescriptionView, PharmacyDetailView,
     MedicationLogListCreateView, LogMedicationIntakeView,
-    PharmacyInventoryPortalViewSet
+    PharmacyInventoryPortalViewSet, PharmacyBankDetailsView, VerifyBankAccountView
 )
 
 router = DefaultRouter()
@@ -20,6 +20,8 @@ urlpatterns = [
     path('<int:pharmacy_id>/inventory/', PharmacyInventoryListView.as_view(), name='pharmacy-inventory'),
     path('portal/orders/', PharmacyOrderListView.as_view(), name='pharmacy-order-list'),
     path('portal/orders/<int:pk>/', PharmacyOrderDetailView.as_view(), name='pharmacy-order-detail'),
+    path('portal/onboarding/bank/', PharmacyBankDetailsView.as_view(), name='pharmacy-bank-details'),
+    path('portal/verify-account/', VerifyBankAccountView.as_view(), name='pharmacy-verify-account'),
     path('prescriptions/<int:prescription_id>/create_order/', CreateOrderFromPrescriptionView.as_view(), name='prescription-create-order'),
     path('orders/', MedicationOrderListCreateView.as_view(), name='medication-order-list'),
     path('orders/<int:pk>/', MedicationOrderDetailView.as_view(), name='medication-order-detail'),
