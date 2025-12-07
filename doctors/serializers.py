@@ -116,6 +116,21 @@ class DoctorSerializer(serializers.ModelSerializer):
             return f"{obj.reviewed_by.first_name} {obj.reviewed_by.last_name}".strip() or obj.reviewed_by.username
         return None
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Fallback to user profile picture if doctor profile picture is missing
+        if not ret.get('profile_picture') and instance.user and instance.user.profile_picture:
+            try:
+                request = self.context.get('request')
+                if request:
+                    ret['profile_picture'] = request.build_absolute_uri(instance.user.profile_picture.url)
+                else:
+                    ret['profile_picture'] = instance.user.profile_picture.url
+            except Exception:
+                # Fallback if URL construction fails
+                pass
+        return ret
+
 class DoctorReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = DoctorReview

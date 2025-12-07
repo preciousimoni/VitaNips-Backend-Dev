@@ -98,7 +98,7 @@ class DoctorApplicationView(generics.CreateAPIView, generics.RetrieveUpdateAPIVi
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def patch(self, request, *args, **kwargs):
-        """Update application (only if draft or needs_revision)"""
+        """Update application"""
         doctor = self.get_object()
         if not doctor:
             return Response(
@@ -106,19 +106,31 @@ class DoctorApplicationView(generics.CreateAPIView, generics.RetrieveUpdateAPIVi
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Only allow updates if status is draft or needs_revision
-        if doctor.application_status not in ['draft', 'needs_revision']:
+        # Allow updates if status is draft, needs_revision, or approved
+        # If approved, we restrict certain fields below
+        if doctor.application_status not in ['draft', 'needs_revision', 'approved']:
             return Response(
-                {'error': f'Cannot update application. Current status: {doctor.get_application_status_display()}. Only draft or needs_revision applications can be updated.'},
+                {'error': f'Cannot update application. Current status: {doctor.get_application_status_display()}.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # If approved, prevent changing critical fields that require verification
+        if doctor.application_status == 'approved':
+            restricted_fields = ['license_number', 'license_issuing_authority', 'license_expiry_date', 'specialty_ids']
+            for field in restricted_fields:
+                if field in request.data:
+                    return Response(
+                        {'error': f'Cannot update {field} after approval. Please contact support to update verified information.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
         
         serializer = self.get_serializer(doctor, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         
-        # If updating to submitted, set submitted_at
-        if serializer.validated_data.get('application_status') == 'submitted' or \
-           (not serializer.validated_data.get('application_status') and doctor.application_status == 'draft'):
+        # If updating to submitted (from draft), set submitted_at
+        if (serializer.validated_data.get('application_status') == 'submitted' or \
+           (not serializer.validated_data.get('application_status') and doctor.application_status == 'draft')) and \
+           doctor.application_status != 'approved':
             from django.utils import timezone
             doctor.submitted_at = timezone.now()
             doctor.application_status = 'submitted'
