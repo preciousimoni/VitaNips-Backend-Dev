@@ -137,30 +137,15 @@ CHANNEL_LAYERS = {
 }
 
 # Database
-# Prioritize DATABASE_URL - if it exists and is not localhost, use it (production)
 database_url = config('DATABASE_URL', default=None)
 is_production_db = database_url and 'localhost' not in database_url.lower() and '127.0.0.1' not in database_url.lower()
 
-# Set DJANGO_ENV based on database URL if not explicitly set
-DJANGO_ENV = config('DJANGO_ENV', default='production' if is_production_db else 'development')
+DJANGO_ENV = config('DJANGO_ENV', default=None)
+if DJANGO_ENV is None:
+    # Auto-detect from DATABASE_URL if DJANGO_ENV not set
+    DJANGO_ENV = 'production' if is_production_db else 'development'
 
-if is_production_db and database_url:
-    # Production: Use DATABASE_URL (Neon, Fly.io Postgres, or other external Postgres)
-    try:
-        DATABASES = {
-            'default': dj_database_url.parse(
-                database_url,
-                conn_max_age=600,
-                conn_health_checks=True,
-                engine='django.contrib.gis.db.backends.postgis',  # Ensure PostGIS engine
-            )
-        }
-        # Logger not yet defined, use print for now
-        print("Using production database from DATABASE_URL")
-    except Exception as e:
-        print(f"Error parsing DATABASE_URL: {e}")
-        raise
-elif DJANGO_ENV == 'development':
+if DJANGO_ENV == 'development':
     # Development: Use local database settings
     DATABASES = {
         'default': {
@@ -172,6 +157,22 @@ elif DJANGO_ENV == 'development':
             'PORT': config('DEV_DB_PORT', default='5432'),
         }
     }
+    print("Using development database (local)")
+elif DJANGO_ENV == 'production' and database_url:
+    # Production: Use DATABASE_URL (Neon, Fly.io Postgres, or other external Postgres)
+    try:
+        DATABASES = {
+            'default': dj_database_url.parse(
+                database_url,
+                conn_max_age=600,
+                conn_health_checks=True,
+                engine='django.contrib.gis.db.backends.postgis',  # Ensure PostGIS engine
+            )
+        }
+        print("Using production database from DATABASE_URL")
+    except Exception as e:
+        print(f"Error parsing DATABASE_URL: {e}")
+        raise
 else:
     # Fallback: Should not happen, but provide a safe default
     print("WARNING: No valid database configuration found! Using fallback.")

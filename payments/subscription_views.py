@@ -2,7 +2,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from django.utils import timezone
 from datetime import timedelta
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class SubscriptionPlanListView(ListAPIView):
     """List all available subscription plans"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]  # Allow anyone to view plans (no auth required)
     queryset = SubscriptionPlan.objects.filter(is_active=True)
     pagination_class = None  # Disable pagination for subscription plans
     
