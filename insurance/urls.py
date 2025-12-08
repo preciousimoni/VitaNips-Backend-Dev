@@ -4,7 +4,8 @@ from .views import (
     InsuranceProviderListView, InsurancePlanListView,
     UserInsuranceListCreateView, UserInsuranceDetailView,
     InsuranceClaimListCreateView, InsuranceClaimDetailView,
-    InsuranceDocumentListCreateView, InsuranceDocumentDetailView
+    InsuranceDocumentListCreateView, InsuranceDocumentDetailView,
+    VerifyInsuranceDetailsView
 )
 
 urlpatterns = [
@@ -12,6 +13,7 @@ urlpatterns = [
     path('plans/', InsurancePlanListView.as_view(), name='insurance-plan-list'),
     path('user-insurance/', UserInsuranceListCreateView.as_view(), name='user-insurance-list'),
     path('user-insurance/<int:pk>/', UserInsuranceDetailView.as_view(), name='user-insurance-detail'),
+    path('verify/', VerifyInsuranceDetailsView.as_view(), name='verify-insurance-details'),
     path('claims/', InsuranceClaimListCreateView.as_view(), name='insurance-claim-list'),
     path('claims/<int:pk>/', InsuranceClaimDetailView.as_view(), name='insurance-claim-detail'),
     path('documents/', InsuranceDocumentListCreateView.as_view(), name='insurance-document-list'),

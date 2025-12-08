@@ -34,11 +34,83 @@ class InsurancePlan(models.Model):
     out_of_pocket_max = models.DecimalField(max_digits=10, decimal_places=2)
     coverage_details = models.TextField()
     is_active = models.BooleanField(default=True)
+    
+    # Coverage Percentages
+    consultation_coverage_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=90.00,
+        help_text="Percentage of consultation fees covered (0-100)"
+    )
+    medication_coverage_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=85.00,
+        help_text="Percentage of medication costs covered (0-100)"
+    )
+    lab_test_coverage_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=80.00,
+        help_text="Percentage of lab test costs covered (0-100)"
+    )
+    
+    # Annual Limits
+    max_consultations_per_year = models.IntegerField(
+        null=True, blank=True,
+        help_text="Maximum number of consultations covered per year (null = unlimited)"
+    )
+    max_medication_amount_per_year = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Maximum medication cost covered per year in Naira (null = unlimited)"
+    )
+    max_lab_tests_per_year = models.IntegerField(
+        null=True, blank=True,
+        help_text="Maximum number of lab tests covered per year (null = unlimited)"
+    )
+    
+    # Service Coverage Flags
+    covers_telemedicine = models.BooleanField(default=True, help_text="Covers virtual consultations")
+    covers_emergency = models.BooleanField(default=True, help_text="Covers emergency services")
+    covers_maternity = models.BooleanField(default=False, help_text="Covers maternity care")
+    covers_dental = models.BooleanField(default=False, help_text="Covers dental services")
+    covers_optical = models.BooleanField(default=False, help_text="Covers optical/vision services")
+    covers_lab_tests = models.BooleanField(default=True, help_text="Covers laboratory tests")
+    covers_surgery = models.BooleanField(default=False, help_text="Covers surgical procedures")
+    covers_physiotherapy = models.BooleanField(default=False, help_text="Covers physiotherapy")
+    
+    # Pre-authorization Requirements
+    requires_preauth_for_specialist = models.BooleanField(
+        default=False,
+        help_text="Requires pre-authorization for specialist consultations"
+    )
+    requires_preauth_for_surgery = models.BooleanField(
+        default=True,
+        help_text="Requires pre-authorization for surgical procedures"
+    )
+    preauth_threshold_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Amount above which pre-authorization is required (in Naira)"
+    )
+    
+    # Network Restrictions (JSON fields for flexibility)
+    network_hospitals = models.JSONField(
+        default=list, blank=True,
+        help_text="List of approved hospital names/IDs"
+    )
+    network_pharmacies = models.JSONField(
+        default=list, blank=True,
+        help_text="List of approved pharmacy names/IDs"
+    )
+    network_labs = models.JSONField(
+        default=list, blank=True,
+        help_text="List of approved laboratory names/IDs"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     def __str__(self):
         return f"{self.provider.name} - {self.name}"
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Insurance Plan"
+        verbose_name_plural = "Insurance Plans"
 
 class UserInsurance(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='insurance_plans')
@@ -100,3 +172,166 @@ class InsuranceDocument(models.Model):
     
     def __str__(self):
         return f"{self.title} - {self.user.email}"
+
+
+class HMOPayment(models.Model):
+    """Track payments from HMO providers to the platform"""
+    PAYMENT_STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('partial', 'Partially Paid'),
+        ('overdue', 'Overdue'),
+        ('disputed', 'Disputed'),
+    )
+    
+    claim = models.OneToOneField(
+        InsuranceClaim, on_delete=models.CASCADE, related_name='hmo_payment'
+    )
+    hmo_provider = models.ForeignKey(
+        InsuranceProvider, on_delete=models.CASCADE, related_name='payments'
+    )
+    
+    # Payment Breakdown
+    service_amount = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Original service cost"
+    )
+    hmo_covered_amount = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Amount HMO is responsible for"
+    )
+    platform_processing_fee = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Platform's processing fee (percentage of covered amount)"
+    )
+    total_due_from_hmo = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        help_text="Total amount HMO owes (covered + processing fee)"
+    )
+    amount_paid = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0.00,
+        help_text="Amount actually paid by HMO"
+    )
+    
+    # Payment Tracking
+    payment_status = models.CharField(
+        max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending'
+    )
+    expected_payment_date = models.DateField(null=True, blank=True)
+    date_paid = models.DateField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=200, blank=True, null=True)
+    
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"HMO Payment for Claim {self.claim.claim_number}"
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "HMO Payment"
+        verbose_name_plural = "HMO Payments"
+
+
+class HMOInvoice(models.Model):
+    """Monthly invoices sent to HMO providers"""
+    INVOICE_STATUS_CHOICES = (
+        ('draft', 'Draft'),
+        ('sent', 'Sent'),
+        ('paid', 'Paid'),
+        ('partial', 'Partially Paid'),
+        ('overdue', 'Overdue'),
+    )
+    
+    hmo_provider = models.ForeignKey(
+        InsuranceProvider, on_delete=models.CASCADE, related_name='invoices'
+    )
+    invoice_number = models.CharField(max_length=100, unique=True)
+    
+    # Period
+    month = models.IntegerField(help_text="Month (1-12)")
+    year = models.IntegerField(help_text="Year")
+    
+    # Totals
+    total_claims = models.IntegerField(default=0)
+    total_covered_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    platform_processing_fees = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    total_amount_due = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    
+    # Status
+    status = models.CharField(max_length=20, choices=INVOICE_STATUS_CHOICES, default='draft')
+    date_sent = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    date_paid = models.DateField(null=True, blank=True)
+    
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Invoice {self.invoice_number} - {self.hmo_provider.name}"
+    
+    class Meta:
+        ordering = ['-year', '-month']
+        unique_together = ['hmo_provider', 'month', 'year']
+        verbose_name = "HMO Invoice"
+        verbose_name_plural = "HMO Invoices"
+
+
+class PreAuthorization(models.Model):
+    """Pre-authorization requests for high-cost services"""
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('denied', 'Denied'),
+        ('expired', 'Expired'),
+    )
+    
+    SERVICE_TYPE_CHOICES = (
+        ('specialist', 'Specialist Consultation'),
+        ('surgery', 'Surgical Procedure'),
+        ('expensive_medication', 'Expensive Medication'),
+        ('lab_test', 'Laboratory Test'),
+        ('imaging', 'Imaging/Radiology'),
+        ('other', 'Other'),
+    )
+    
+    user_insurance = models.ForeignKey(
+        UserInsurance, on_delete=models.CASCADE, related_name='preauthorizations'
+    )
+    service_type = models.CharField(max_length=50, choices=SERVICE_TYPE_CHOICES)
+    service_description = models.TextField()
+    estimated_cost = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField(help_text="Medical justification for the service")
+    
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    hmo_reference_number = models.CharField(max_length=200, blank=True, null=True)
+    
+    # Dates
+    requested_date = models.DateTimeField(auto_now_add=True)
+    approved_date = models.DateTimeField(null=True, blank=True)
+    expiry_date = models.DateField(
+        null=True, blank=True,
+        help_text="Date when pre-authorization expires"
+    )
+    
+    # Response
+    hmo_response = models.TextField(blank=True, null=True)
+    approved_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Amount approved by HMO (may differ from estimated cost)"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"PreAuth {self.id} - {self.user_insurance.user.email} - {self.service_type}"
+    
+    class Meta:
+        ordering = ['-requested_date']
+        verbose_name = "Pre-Authorization"
+        verbose_name_plural = "Pre-Authorizations"

@@ -211,7 +211,14 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         from payments.utils import user_can_book_appointment
         from payments.models import UserSubscription
         
-        if not user_can_book_appointment(self.request.user):
+        try:
+            can_book = user_can_book_appointment(self.request.user)
+        except Exception as e:
+            logger.error(f"Error checking appointment booking permission: {e}", exc_info=True)
+            # Allow booking if check fails (fail open)
+            can_book = True
+        
+        if not can_book:
             subscription = UserSubscription.objects.filter(
                 user=self.request.user,
                 status='active'
@@ -249,6 +256,69 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
                 'limit': limit_val,
                 'upgrade_url': '/subscription'
             })
+        
+        # Handle insurance if provided
+        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        payment_reference = serializer.validated_data.pop('payment_reference', None)
+        user_insurance = None
+        
+        if user_insurance_id:
+            from insurance.models import UserInsurance
+            try:
+                user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=self.request.user)
+            except UserInsurance.DoesNotExist:
+                pass  # Continue without insurance if invalid
+        
+        # Check if payment is required
+        doctor = serializer.validated_data.get('doctor')
+        consultation_fee = None
+        if doctor and doctor.consultation_fee:
+            consultation_fee = doctor.consultation_fee
+        
+        # If no insurance and consultation fee exists, payment is required
+        if not user_insurance and consultation_fee and consultation_fee > 0:
+            # Allow creating appointment with payment_status='pending' without payment_reference
+            # Payment reference will be added later via PATCH when payment is completed
+            payment_status = 'paid' if payment_reference else 'pending'
+            appointment = serializer.save(
+                user=self.request.user,
+                user_insurance=user_insurance,
+                payment_reference=payment_reference if payment_reference else None,
+                payment_status=payment_status,
+                consultation_fee=consultation_fee
+            )
+        else:
+            # With insurance or no fee - payment not required
+            # Set payment_status based on whether payment_reference exists
+            payment_status = 'paid' if payment_reference else 'pending'
+            appointment = serializer.save(
+                user=self.request.user,
+                user_insurance=user_insurance,
+                payment_reference=payment_reference if payment_reference else None,
+                payment_status=payment_status,
+                consultation_fee=consultation_fee if consultation_fee else None
+            )
+        
+        # Calculate insurance coverage if insurance is selected
+        if user_insurance and appointment.consultation_fee:
+            try:
+                from insurance.utils import calculate_insurance_coverage
+                from decimal import Decimal
+                
+                consultation_fee = Decimal(str(appointment.consultation_fee))
+                coverage = calculate_insurance_coverage(
+                    user_insurance=user_insurance,
+                    total_amount=consultation_fee,
+                    service_type='consultation'
+                )
+                
+                appointment.consultation_fee = consultation_fee
+                appointment.insurance_covered_amount = coverage['covered_amount']
+                appointment.patient_copay = coverage['patient_responsibility']
+                appointment.save()
+            except Exception as e:
+                logger.error(f"Error calculating insurance coverage for appointment: {e}", exc_info=True)
+                # Continue without insurance coverage if calculation fails
 
 class DoctorBankDetailsView(views.APIView):
     """
@@ -371,66 +441,6 @@ class DoctorVerifyBankAccountView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        
-        # Handle insurance if provided
-        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
-        payment_reference = serializer.validated_data.pop('payment_reference', None)
-        user_insurance = None
-        
-        if user_insurance_id:
-            from insurance.models import UserInsurance
-            try:
-                user_insurance = UserInsurance.objects.get(id=user_insurance_id, user=self.request.user)
-            except UserInsurance.DoesNotExist:
-                pass  # Continue without insurance if invalid
-        
-        # Check if payment is required
-        doctor = serializer.validated_data.get('doctor')
-        consultation_fee = None
-        if doctor and doctor.consultation_fee:
-            consultation_fee = doctor.consultation_fee
-        
-        # If no insurance and consultation fee exists, payment is required
-        if not user_insurance and consultation_fee and consultation_fee > 0:
-            # Allow creating appointment with payment_status='pending' without payment_reference
-            # Payment reference will be added later via PATCH when payment is completed
-            payment_status = 'paid' if payment_reference else 'pending'
-            appointment = serializer.save(
-                user=self.request.user,
-                user_insurance=user_insurance,
-                payment_reference=payment_reference if payment_reference else None,
-                payment_status=payment_status,
-                consultation_fee=consultation_fee
-            )
-        else:
-            # With insurance or no fee - payment not required
-            # Set payment_status based on whether payment_reference exists
-            payment_status = 'paid' if payment_reference else 'pending'
-            appointment = serializer.save(
-                user=self.request.user,
-                user_insurance=user_insurance,
-                payment_reference=payment_reference if payment_reference else None,
-                payment_status=payment_status,
-                consultation_fee=consultation_fee if consultation_fee else None
-            )
-        
-        # Calculate insurance coverage if insurance is selected
-        if user_insurance and appointment.consultation_fee:
-            from insurance.utils import calculate_insurance_coverage
-            from decimal import Decimal
-            
-            consultation_fee = Decimal(str(appointment.consultation_fee))
-            coverage = calculate_insurance_coverage(
-                user_insurance,
-                consultation_fee,
-                service_type='consultation'
-            )
-            
-            appointment.consultation_fee = consultation_fee
-            appointment.insurance_covered_amount = coverage['covered_amount']
-            appointment.patient_copay = coverage['patient_copay']
-            appointment.save()
-
 class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AppointmentSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -447,8 +457,11 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
         """Override to trigger notification on status change and handle insurance."""
         old_instance = self.get_object()
         
-        # Handle insurance if being updated
-        user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
+        # Handle insurance if being updated (use get to avoid KeyError)
+        user_insurance_id = serializer.validated_data.get('user_insurance_id')
+        if user_insurance_id is not None:
+            serializer.validated_data.pop('user_insurance_id')
+        
         user_insurance = old_instance.user_insurance  # Keep existing if not updating
         
         if user_insurance_id is not None:  # Explicitly set (could be None to remove)
@@ -465,11 +478,18 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
                 user_insurance = None  # Remove insurance
         
         # Handle payment_reference if provided (from payment callback)
-        payment_reference = serializer.validated_data.pop('payment_reference', None)
+        payment_reference = serializer.validated_data.get('payment_reference')
+        if payment_reference is not None:
+            serializer.validated_data.pop('payment_reference')
+        
         old_payment_status = old_instance.payment_status
         
         # Save the appointment first
-        new_instance = serializer.save(user_insurance=user_insurance)
+        try:
+            new_instance = serializer.save(user_insurance=user_insurance)
+        except Exception as e:
+            logger.error(f"Error saving appointment update: {e}", exc_info=True)
+            raise
         
         # Update payment fields if payment_reference is provided
         payment_status_changed = False
@@ -483,10 +503,17 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
         if payment_status_changed:
             try:
                 patient = new_instance.user
-                doctor_name = new_instance.doctor.full_name if new_instance.doctor else "Doctor"
+                doctor = new_instance.doctor
+                if not doctor or not patient:
+                    return
+                
+                doctor_name = doctor.full_name if doctor else "Doctor"
+                date_str = new_instance.date.strftime('%b %d') if new_instance.date else "TBD"
+                time_str = new_instance.start_time.strftime('%I:%M %p') if new_instance.start_time else "TBD"
+                
                 create_notification(
                     recipient=patient,
-                    verb=f"Payment confirmed for your appointment with {doctor_name} on {new_instance.date.strftime('%b %d')} at {new_instance.start_time.strftime('%I:%M %p')}.",
+                    verb=f"Payment confirmed for your appointment with {doctor_name} on {date_str} at {time_str}.",
                     title=f"Payment Confirmed - Appointment",
                     level='success',
                     category='appointment',
@@ -495,25 +522,28 @@ class AppointmentDetailView(generics.RetrieveUpdateDestroyAPIView):
                 )
                 print(f"Payment confirmation notification created for user {patient.id} for appointment {new_instance.id}")
             except Exception as e:
-                print(f"Error creating payment confirmation notification for appointment {new_instance.id}: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"Error creating payment confirmation notification for appointment {new_instance.id}: {e}", exc_info=True)
         
         # Calculate insurance coverage if insurance is set (after saving, since these fields are read-only)
         if user_insurance:
-            consultation_fee = new_instance.doctor.consultation_fee if new_instance.doctor and new_instance.doctor.consultation_fee else Decimal('0.00')
-            
-            if consultation_fee > 0:
-                coverage = calculate_insurance_coverage(
-                    user_insurance,
-                    consultation_fee,
-                    service_type='consultation'
-                )
-                # Set these fields directly on the instance since they're read-only in serializer
-                new_instance.consultation_fee = consultation_fee
-                new_instance.insurance_covered_amount = coverage['covered_amount']
-                new_instance.patient_copay = coverage['patient_copay']
-                new_instance.save()
+            try:
+                from decimal import Decimal
+                consultation_fee = new_instance.doctor.consultation_fee if new_instance.doctor and new_instance.doctor.consultation_fee else Decimal('0.00')
+                
+                if consultation_fee > 0:
+                    coverage = calculate_insurance_coverage(
+                        user_insurance,
+                        consultation_fee,
+                        service_type='consultation'
+                    )
+                    # Set these fields directly on the instance since they're read-only in serializer
+                    new_instance.consultation_fee = consultation_fee
+                    new_instance.insurance_covered_amount = coverage['covered_amount']
+                    new_instance.patient_copay = coverage['patient_responsibility']
+                    new_instance.save()
+            except Exception as e:
+                logger.error(f"Error calculating insurance coverage during appointment update: {e}", exc_info=True)
+                # Continue without updating insurance coverage if calculation fails
         
         # Generate insurance claim automatically when appointment is completed
         if old_instance.status != new_instance.status and new_instance.status == 'completed':
