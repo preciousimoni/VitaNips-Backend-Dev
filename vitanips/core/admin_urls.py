@@ -4,10 +4,12 @@ from .admin_views import (
     AdminStatsView,
     AdminUsersListView,
     AdminUserDetailView,
+    AdminUserCreateView,
     AdminDoctorsListView,
     AdminDoctorVerificationView,
     AdminPharmaciesListView,
     AdminPharmacyDetailView,
+    AdminPharmacyCreateView,
     AdminAnalyticsView,
     AdminAppointmentsListView,
     AdminAppointmentDetailView,
@@ -19,8 +21,9 @@ urlpatterns = [
     path('stats/', AdminStatsView.as_view(), name='admin-stats'),
     
     # Users Management
-    path('users/', AdminUsersListView.as_view(), name='admin-users-list'),
-    path('users/<int:user_id>/', AdminUserDetailView.as_view(), name='admin-user-detail'),
+    path('users/', AdminUsersListView.as_view(), name='admin-users'), # Changed from AdminUsersListView to AdminUserListView in the instruction, but keeping AdminUsersListView to match imports. Name changed to 'admin-users'.
+    path('users/create/', AdminUserCreateView.as_view(), name='admin-users-create'),
+    path('users/<int:pk>/', AdminUserDetailView.as_view(), name='admin-user-detail'), # user_id changed to pk
     
     # Doctors Management
     path('doctors/', AdminDoctorsListView.as_view(), name='admin-doctors-list'),
@@ -28,6 +31,7 @@ urlpatterns = [
     
     # Pharmacies Management
     path('pharmacies/', AdminPharmaciesListView.as_view(), name='admin-pharmacies-list'),
+    path('pharmacies/create/', AdminPharmacyCreateView.as_view(), name='admin-pharmacies-create'),
     path('pharmacies/<int:pharmacy_id>/', AdminPharmacyDetailView.as_view(), name='admin-pharmacy-detail'),
     
     # Analytics

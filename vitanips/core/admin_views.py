@@ -136,6 +136,64 @@ class AdminUsersListView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class AdminUserCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        try:
+            data = request.data
+            
+            # Basic Validation
+            required_fields = ['email', 'username', 'password', 'first_name', 'last_name', 'role']
+            for field in required_fields:
+                if not data.get(field):
+                    return Response({'error': f'Field {field} is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # check if user exists
+            if User.objects.filter(email=data['email']).exists():
+                return Response({'error': 'User with this email already exists'}, status=status.HTTP_400_BAD_REQUEST)
+            if User.objects.filter(username=data['username']).exists():
+                return Response({'error': 'User with this username already exists'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Create User
+            user = User.objects.create_user(
+                username=data['username'],
+                email=data['email'],
+                password=data['password'],
+                first_name=data['first_name'],
+                last_name=data['last_name']
+            )
+
+            # Handle Roles
+            role = data.get('role')
+            
+            if role == 'admin':
+                user.is_staff = True
+                user.save()
+                
+            elif role == 'pharmacy':
+                pharmacy_id = data.get('pharmacy_id')
+                if not pharmacy_id:
+                    user.delete()
+                    return Response({'error': 'Pharmacy ID is required for pharmacy staff'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                try:
+                    pharmacy = Pharmacy.objects.get(id=pharmacy_id)
+                    user.is_pharmacy_staff = True
+                    user.works_at_pharmacy = pharmacy
+                    user.save()
+                except Pharmacy.DoesNotExist:
+                    user.delete()
+                    return Response({'error': 'Invalid Pharmacy ID'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Return serialized user
+            serializer = UserSerializer(user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class AdminUserDetailView(APIView):
     """
     Get, update, or delete a specific user
@@ -369,6 +427,20 @@ class AdminPharmaciesListView(APIView):
             'count': pharmacies.count(),
             'results': serializer.data
         }, status=status.HTTP_200_OK)
+
+
+class AdminPharmacyCreateView(APIView):
+    """
+    Create a new partner pharmacy
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        serializer = PharmacySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AdminPharmacyDetailView(APIView):
