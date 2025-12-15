@@ -2,7 +2,12 @@
 from django.db import models
 from django.conf import settings
 from django.contrib.gis.db import models as gis_models
+from django.contrib.gis.geos import Point
 from doctors.models import Prescription, PrescriptionItem
+import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Pharmacy(models.Model):
     name = models.CharField(max_length=200)
@@ -23,6 +28,33 @@ class Pharmacy(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        # Automatic Geocoding if location is missing but address is present
+        if not self.location and self.address:
+            try:
+                api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', None)
+                if api_key:
+                    response = requests.get(
+                        'https://maps.googleapis.com/maps/api/geocode/json',
+                        params={'address': self.address, 'key': api_key}
+                    )
+                    data = response.json()
+                    
+                    if data.get('status') == 'OK' and data.get('results'):
+                        location = data['results'][0]['geometry']['location']
+                        lat = location['lat']
+                        lng = location['lng']
+                        # Point takes (x, y) which is (longitude, latitude)
+                        self.location = Point(lng, lat, srid=4326)
+                    else:
+                        logger.warning(f"Geocoding failed for pharmacy {self.name}: {data.get('status')}")
+                else:
+                    logger.warning("GOOGLE_MAPS_API_KEY not found in settings. Automatic geocoding skipped.")
+            except Exception as e:
+                logger.error(f"Error during automatic geocoding for pharmacy {self.name}: {e}")
+
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return self.name
