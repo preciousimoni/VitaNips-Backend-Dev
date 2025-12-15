@@ -528,6 +528,28 @@ class AdminAppointmentsListView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+
+class AdminAppointmentDetailView(APIView):
+    """
+    Get a specific appointment details
+    """
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request, appointment_id):
+        from doctors.serializers import AppointmentSerializer
+        try:
+            appointment = Appointment.objects.select_related(
+                'user', 'doctor', 'doctor__user'
+            ).get(id=appointment_id)
+            serializer = AppointmentSerializer(appointment, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Appointment.DoesNotExist:
+            return Response(
+                {'error': 'Appointment not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
 class AdminRecentActivityView(APIView):
     """
     Get recent admin activities for the dashboard

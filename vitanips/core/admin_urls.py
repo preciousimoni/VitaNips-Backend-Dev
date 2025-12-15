@@ -10,6 +10,7 @@ from .admin_views import (
     AdminPharmacyDetailView,
     AdminAnalyticsView,
     AdminAppointmentsListView,
+    AdminAppointmentDetailView,
     AdminRecentActivityView,
 )
 
@@ -34,6 +35,7 @@ urlpatterns = [
     
     # Appointments Management
     path('appointments/', AdminAppointmentsListView.as_view(), name='admin-appointments-list'),
+    path('appointments/<int:appointment_id>/', AdminAppointmentDetailView.as_view(), name='admin-appointment-detail'),
     
     # Recent Activity
     path('activity/', AdminRecentActivityView.as_view(), name='admin-recent-activity'),
