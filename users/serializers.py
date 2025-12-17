@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from .models import User, MedicalHistory, Vaccination
 from insurance.serializers import UserInsuranceSerializer
 from emergency.serializers import EmergencyContactSerializer
+from vitanips.core.utils import send_app_email
 # from doctors.serializers import DoctorProfileSummarySerializer
 
 User = get_user_model()
@@ -101,6 +102,25 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         # Store the doctor registration intent
         user.registered_as_doctor = is_doctor
         user.save()
+        
+        # Send welcome email
+        try:
+            context = {
+                'user': user,
+                'subject': 'Welcome to VitaNips! 🎉'
+            }
+            send_app_email(
+                to_email=user.email,
+                subject=context['subject'],
+                template_name='emails/welcome.html',
+                context=context
+            )
+        except Exception as e:
+            # Log error but don't fail registration if email fails
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send welcome email to {user.email}: {e}")
+        
         return user
 
 

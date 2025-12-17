@@ -20,7 +20,7 @@
     
     <div class="info-item">
         <span class="info-label">💊 Medication:</span>
-        <span class="info-value" style="font-weight: 600; color: #3b82f6;">
+        <span class="info-value" style="font-weight: 600; color: #32a852;">
             {{ medication.name|default:reminder.medication.name }}
         </span>
     </div>
@@ -92,7 +92,7 @@
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 25px 0;">
     <tr>
         <td align="center">
-            <a href="https://vitanips.com/medications/reminders" class="button" style="background-color: #10b981; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
+            <a href="https://vitanips.com/medications/reminders" class="button" style="background: linear-gradient(135deg, #32a852 0%, #267a3e 100%); color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 12px; font-weight: 600; display: inline-block; box-shadow: 0 4px 12px rgba(50, 168, 82, 0.3);">
                 ✓ Mark as Taken
             </a>
         </td>
@@ -136,5 +136,5 @@
 
 {% block footer_text %}
 You're receiving this email because you have an active medication reminder in VitaNips.<br>
-To manage your reminders and notification preferences, <a href="https://vitanips.com/settings/notifications" style="color: #3b82f6;">click here</a>.
+To manage your reminders and notification preferences, <a href="https://vitanips.com/settings/notifications" style="color: #32a852; font-weight: 500;">click here</a>.
 {% endblock %}
