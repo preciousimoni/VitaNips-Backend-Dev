@@ -42,6 +42,26 @@ echo "Collecting static files..."
 python manage.py collectstatic --noinput || true
 
 # Start server - MUST listen on 0.0.0.0, not 127.0.0.1
-echo "Starting server on 0.0.0.0:${PORT:-8000}..."
-exec daphne -b 0.0.0.0 -p ${PORT:-8000} vitanips.asgi:application
+# Read PORT from environment (fly.io sets this)
+PORT=${PORT:-8000}
+HOST=${HOST:-0.0.0.0}
+
+echo "=========================================="
+echo "Starting VitaNips server..."
+echo "Host: $HOST"
+echo "Port: $PORT"
+echo "DJANGO_ENV: ${DJANGO_ENV:-not set}"
+echo "=========================================="
+
+# Verify daphne is available
+if ! command -v daphne &> /dev/null; then
+    echo "ERROR: daphne command not found!"
+    echo "Installed packages:"
+    pip list | grep -i daphne || echo "daphne not in pip list"
+    exit 1
+fi
+
+# Start daphne server - use exec to replace shell process
+# This ensures proper signal handling and that the process stays alive
+exec daphne -b "$HOST" -p "$PORT" vitanips.asgi:application
 
