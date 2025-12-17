@@ -442,12 +442,44 @@ TWILIO_API_KEY_SECRET = config('TWILIO_API_KEY_SECRET', default='')
 
 # --- Push Notifications Configuration ---
 # FCM HTTP v1 API (Modern, Recommended)
-FIREBASE_SERVICE_ACCOUNT_KEY_PATH = BASE_DIR / config('FIREBASE_SERVICE_ACCOUNT_KEY', default='firebase-service-account.json')
+# Support both file path and base64-encoded JSON content from secrets
+FIREBASE_SERVICE_ACCOUNT_KEY = config('FIREBASE_SERVICE_ACCOUNT_KEY', default='firebase-service-account.json')
+FIREBASE_SERVICE_ACCOUNT_JSON = config('FIREBASE_SERVICE_ACCOUNT_JSON', default=None)  # Base64-encoded JSON content
+
+# Determine service account key path
+FIREBASE_SERVICE_ACCOUNT_KEY_PATH = None
+if FIREBASE_SERVICE_ACCOUNT_JSON:
+    # If JSON content is provided as secret, write it to a temp file
+    import base64
+    import json
+    import tempfile
+    try:
+        # Decode base64 JSON
+        json_content = base64.b64decode(FIREBASE_SERVICE_ACCOUNT_JSON).decode('utf-8')
+        # Validate it's valid JSON
+        json.loads(json_content)
+        # Write to temp file
+        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+        temp_file.write(json_content)
+        temp_file.close()
+        FIREBASE_SERVICE_ACCOUNT_KEY_PATH = Path(temp_file.name)
+        logger.info("✓ FCM service account loaded from secret")
+    except Exception as e:
+        logger.error(f"Failed to decode FCM service account JSON: {e}")
+        FIREBASE_SERVICE_ACCOUNT_KEY_PATH = None
+elif (BASE_DIR / FIREBASE_SERVICE_ACCOUNT_KEY).exists():
+    # Use file path if file exists
+    FIREBASE_SERVICE_ACCOUNT_KEY_PATH = BASE_DIR / FIREBASE_SERVICE_ACCOUNT_KEY
+else:
+    # Try default filename
+    default_path = BASE_DIR / 'firebase-service-account.json'
+    if default_path.exists():
+        FIREBASE_SERVICE_ACCOUNT_KEY_PATH = default_path
 
 PUSH_NOTIFICATIONS_SETTINGS = {
     # Firebase Cloud Messaging (FCM) - HTTP v1 API
     # Download service account JSON from Firebase Console
-    "FCM_SERVICE_ACCOUNT_KEY": str(FIREBASE_SERVICE_ACCOUNT_KEY_PATH) if FIREBASE_SERVICE_ACCOUNT_KEY_PATH.exists() else None,
+    "FCM_SERVICE_ACCOUNT_KEY": str(FIREBASE_SERVICE_ACCOUNT_KEY_PATH) if FIREBASE_SERVICE_ACCOUNT_KEY_PATH and FIREBASE_SERVICE_ACCOUNT_KEY_PATH.exists() else None,
     
     # Legacy API (deprecated but kept for backward compatibility)
     # Only used if service account key is not available
@@ -468,7 +500,7 @@ PUSH_NOTIFICATIONS_SETTINGS = {
 }
 
 # Log push notification configuration status
-if FIREBASE_SERVICE_ACCOUNT_KEY_PATH.exists():
+if FIREBASE_SERVICE_ACCOUNT_KEY_PATH and FIREBASE_SERVICE_ACCOUNT_KEY_PATH.exists():
     logger.info(f"✓ FCM configured with service account: {FIREBASE_SERVICE_ACCOUNT_KEY_PATH.name}")
 elif PUSH_NOTIFICATIONS_SETTINGS.get("FCM_API_KEY"):
     logger.warning("⚠ FCM using legacy API key (deprecated). Consider migrating to service account.")
