@@ -200,9 +200,9 @@ class AdminUserDetailView(APIView):
     """
     permission_classes = [IsAuthenticated, IsAdminUser]
 
-    def get(self, request, user_id):
+    def get(self, request, pk):
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=pk)
             serializer = UserSerializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
         except User.DoesNotExist:
@@ -210,10 +210,15 @@ class AdminUserDetailView(APIView):
                 {'error': 'User not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        except Exception as e:
+            return Response(
+                {'error': f'Error retrieving user: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-    def patch(self, request, user_id):
+    def patch(self, request, pk):
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=pk)
             
             # Allow updating specific admin fields
             allowed_fields = ['is_active', 'is_staff', 'is_superuser', 'is_pharmacy_staff']
@@ -228,6 +233,11 @@ class AdminUserDetailView(APIView):
             return Response(
                 {'error': 'User not found'},
                 status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Error updating user: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 
