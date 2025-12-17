@@ -3,97 +3,160 @@
 {% block title %}Welcome to VitaNips{% endblock %}
 
 {% block content %}
-<!-- Greeting -->
-<p style="font-size: 20px; color: #1f2937; margin-bottom: 24px; font-weight: 400; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-    Hi {{ user.first_name|default:"there" }},
+<!-- Hero Section with Gradient -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 40px 0;">
+    <tr>
+        <td style="background: linear-gradient(135deg, #32a852 0%, #267a3e 100%); padding: 48px 40px; border-radius: 0 0 24px 24px; text-align: center;">
+            <h1 style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 36px; font-weight: 700; color: #ffffff; margin: 0 0 12px 0; line-height: 1.2; letter-spacing: -0.02em;">
+                Welcome to VitaNips
+            </h1>
+            <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; color: rgba(255, 255, 255, 0.95); margin: 0; line-height: 1.5;">
+                Hi {{ user.first_name|default:"there" }}, your account is ready!
+            </p>
+        </td>
+    </tr>
+</table>
+
+<!-- Main Content -->
+<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; color: #1f2937; margin: 0 0 32px 0; line-height: 1.6; font-weight: 400;">
+    We're excited to have you join our healthcare community. Your journey to better health management starts now.
 </p>
 
-<p style="font-size: 16px; color: #4b5563; margin-bottom: 32px; line-height: 1.7; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-    Welcome to VitaNips. Your account is ready, and you can start managing your health right away.
-</p>
+<!-- Features Grid -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 40px 0;">
+    <tr>
+        <td>
+            <!-- Feature 1 -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 20px 0; background-color: #f0fdf4; border-left: 4px solid #32a852; border-radius: 12px; overflow: hidden;">
+                <tr>
+                    <td style="padding: 24px;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; font-weight: 700; color: #1f2937; margin: 0 0 8px 0;">
+                            Book Appointments
+                        </p>
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            Schedule with verified doctors for in-person or virtual consultations.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Feature 2 -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 20px 0; background-color: #fffbeb; border-left: 4px solid #ffc107; border-radius: 12px; overflow: hidden;">
+                <tr>
+                    <td style="padding: 24px;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; font-weight: 700; color: #1f2937; margin: 0 0 8px 0;">
+                            Medication Management
+                        </p>
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            Set reminders, track prescriptions, and order refills from trusted pharmacies.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Feature 3 -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 20px 0; background-color: #f0fdf4; border-left: 4px solid #32a852; border-radius: 12px; overflow: hidden;">
+                <tr>
+                    <td style="padding: 24px;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; font-weight: 700; color: #1f2937; margin: 0 0 8px 0;">
+                            Health Records
+                        </p>
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            Keep track of your vital signs, medical history, and important documents.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Feature 4 -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0; background-color: #fffbeb; border-left: 4px solid #ffc107; border-radius: 12px; overflow: hidden;">
+                <tr>
+                    <td style="padding: 24px;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; font-weight: 700; color: #1f2937; margin: 0 0 8px 0;">
+                            Insurance & Emergency Services
+                        </p>
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            Manage your insurance plans and access emergency contacts when needed.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
 
-<!-- Main Content Card -->
-<div style="background-color: #ffffff; border: 1px solid #e5e7eb; padding: 32px; margin: 32px 0; border-radius: 12px;">
-    <h2 style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 600; color: #1f2937; line-height: 1.3; margin: 0 0 20px 0; letter-spacing: -0.02em;">
-        What you can do
-    </h2>
-    
-    <div style="margin: 24px 0; padding-bottom: 24px; border-bottom: 1px solid #f3f4f6;">
-        <p style="margin: 0 0 8px 0; color: #1f2937; font-weight: 600; font-size: 16px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Book Appointments
-        </p>
-        <p style="margin: 0; color: #6b7280; font-size: 15px; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Schedule with verified doctors for in-person or virtual consultations.
-        </p>
-    </div>
-    
-    <div style="margin: 24px 0; padding-bottom: 24px; border-bottom: 1px solid #f3f4f6;">
-        <p style="margin: 0 0 8px 0; color: #1f2937; font-weight: 600; font-size: 16px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Medication Management
-        </p>
-        <p style="margin: 0; color: #6b7280; font-size: 15px; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Set reminders, track prescriptions, and order refills from trusted pharmacies.
-        </p>
-    </div>
-    
-    <div style="margin: 24px 0; padding-bottom: 24px; border-bottom: 1px solid #f3f4f6;">
-        <p style="margin: 0 0 8px 0; color: #1f2937; font-weight: 600; font-size: 16px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Health Records
-        </p>
-        <p style="margin: 0; color: #6b7280; font-size: 15px; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Keep track of your vital signs, medical history, and important documents.
-        </p>
-    </div>
-    
-    <div style="margin: 24px 0 0 0;">
-        <p style="margin: 0 0 8px 0; color: #1f2937; font-weight: 600; font-size: 16px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Insurance & Emergency Services
-        </p>
-        <p style="margin: 0; color: #6b7280; font-size: 15px; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-            Manage your insurance plans and access emergency contacts when needed.
-        </p>
-    </div>
-</div>
-
-<!-- Get Started Button -->
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 40px 0;">
+<!-- CTA Button -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 40px 0;">
     <tr>
         <td align="center" style="padding: 0;">
-            <a href="https://vitanips.com/dashboard" style="background-color: #32a852; color: #ffffff !important; padding: 16px 32px; text-decoration: none; border-radius: 9999px; font-weight: 700; font-size: 16px; display: inline-block; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-                Go to Dashboard
+            <a href="https://vitanips.com/dashboard" style="background: linear-gradient(135deg, #32a852 0%, #267a3e 100%); color: #ffffff !important; padding: 18px 40px; text-decoration: none; border-radius: 9999px; font-weight: 700; font-size: 16px; display: inline-block; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; box-shadow: 0 8px 16px rgba(50, 168, 82, 0.3);">
+                Go to Dashboard →
             </a>
         </td>
     </tr>
 </table>
 
-<!-- Quick Start Tips -->
-<div style="background-color: #f9fafb; border: 1px solid #e5e7eb; padding: 24px; margin: 32px 0; border-radius: 12px;">
-    <p style="margin: 0 0 16px 0; color: #1f2937; font-weight: 600; font-size: 16px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-        Quick start
-    </p>
-    <ul style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 15px; line-height: 1.8; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-        <li style="margin-bottom: 8px;">Complete your profile for personalized care</li>
-        <li style="margin-bottom: 8px;">Add emergency contacts</li>
-        <li style="margin-bottom: 8px;">Set up medication reminders</li>
-        <li>Book your first appointment with a verified doctor</li>
-    </ul>
-</div>
+<!-- Quick Start Card -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 40px 0; background-color: #ffffff; border: 2px solid #e5e7eb; border-radius: 16px; overflow: hidden;">
+    <tr>
+        <td style="padding: 32px; background-color: #f9fafb;">
+            <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 20px; font-weight: 700; color: #1f2937; margin: 0 0 20px 0;">
+                Quick Start Guide
+            </p>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                    <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            <span style="color: #32a852; font-weight: 700; margin-right: 8px;">✓</span> Complete your profile for personalized care
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            <span style="color: #32a852; font-weight: 700; margin-right: 8px;">✓</span> Add emergency contacts
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            <span style="color: #32a852; font-weight: 700; margin-right: 8px;">✓</span> Set up medication reminders
+                        </p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px 0;">
+                        <p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; color: #4b5563; margin: 0; line-height: 1.6;">
+                            <span style="color: #32a852; font-weight: 700; margin-right: 8px;">✓</span> Book your first appointment with a verified doctor
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+</table>
 
-<hr class="divider" style="border: 0; border-top: 1px solid #e5e7eb; margin: 40px 0;">
+<!-- Divider -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0 0 32px 0;">
+    <tr>
+        <td style="border-top: 1px solid #e5e7eb;"></td>
+    </tr>
+</table>
 
-<!-- Need Help Section -->
-<p style="font-size: 15px; color: #6b7280; margin: 0 0 8px 0; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
-    Need help? Visit our <a href="https://vitanips.com/support" style="color: #32a852; font-weight: 500; text-decoration: none;">Help Center</a> or email us at <a href="mailto:support@vitanips.com" style="color: #32a852; font-weight: 500; text-decoration: none;">support@vitanips.com</a>.
+<!-- Help Section -->
+<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; color: #6b7280; margin: 0 0 8px 0; line-height: 1.6;">
+    Need help? Visit our <a href="https://vitanips.com/support" style="color: #32a852; font-weight: 600; text-decoration: none;">Help Center</a> or email us at <a href="mailto:support@vitanips.com" style="color: #32a852; font-weight: 600; text-decoration: none;">support@vitanips.com</a>.
 </p>
 
 <!-- Closing -->
-<p style="margin-top: 32px; font-size: 16px; color: #1f2937; font-weight: 400; line-height: 1.6; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;">
+<p style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin-top: 32px; font-size: 16px; color: #1f2937; font-weight: 400; line-height: 1.6; margin-bottom: 0;">
     Best regards,<br>
-    <span style="color: #32a852; font-weight: 600;">The VitaNips Team</span>
+    <span style="color: #32a852; font-weight: 700; font-size: 18px;">The VitaNips Team</span>
 </p>
 {% endblock %}
 
 {% block footer_text %}
 You're receiving this email because you just created a VitaNips account.<br>
-If you didn't create this account, please <a href="https://vitanips.com/support" style="color: #32a852; font-weight: 500;">contact our support team</a> immediately.
+If you didn't create this account, please <a href="https://vitanips.com/support" style="color: #32a852; font-weight: 600;">contact our support team</a> immediately.
 {% endblock %}
