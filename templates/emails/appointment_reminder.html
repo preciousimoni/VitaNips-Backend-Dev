@@ -4,108 +4,104 @@
 
 {% block content %}
 <!-- Greeting -->
-<p class="greeting">
-    Hi {{ user.first_name|default:"there" }}! 👋
+<p class="greeting" style="font-size: 20px; color: #1f2937; margin-bottom: 24px; font-weight: 400; line-height: 1.6;">
+    Hi {{ user.first_name|default:"there" }},
 </p>
 
-<p style="font-size: 16px; color: #4b5563; margin-bottom: 20px;">
-    This is a friendly reminder about your upcoming appointment with {{ doctor_name|default:"your doctor" }}.
+<p style="font-size: 16px; color: #4b5563; margin-bottom: 32px; line-height: 1.7;">
+    This is a reminder about your upcoming appointment with {{ doctor_name|default:"your doctor" }}.
 </p>
 
 <!-- Appointment Details Box -->
-<div class="info-box">
-    <h2 style="margin: 0 0 15px 0; color: #1f2937; font-size: 20px;">
-        📅 Appointment Details
+<div class="info-box" style="background-color: #ffffff; border: 1px solid #e5e7eb; padding: 32px; margin: 32px 0; border-radius: 24px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);">
+    <h2 class="subheading" style="font-family: 'Ojuju', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 24px; font-weight: 500; color: #1f2937; line-height: 1.3; margin: 0 0 24px 0; letter-spacing: -0.02em;">
+        Appointment Details
     </h2>
     
-    <div class="info-item">
-        <span class="info-label">👨‍⚕️ Doctor:</span>
-        <span class="info-value">{{ doctor_name|default:"N/A" }}</span>
+    <div class="info-item" style="margin: 20px 0; padding-bottom: 20px; border-bottom: 1px solid #f3f4f6;">
+        <span class="info-label" style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Doctor</span>
+        <span class="info-value" style="color: #1f2937; font-size: 16px;">{{ doctor_name|default:"N/A" }}</span>
     </div>
     
-    <div class="info-item">
-        <span class="info-label">📆 Date:</span>
-        <span class="info-value">{{ appointment.date|date:"l, F j, Y" }}</span>
+    <div class="info-item" style="margin: 20px 0; padding-bottom: 20px; border-bottom: 1px solid #f3f4f6;">
+        <span class="info-label" style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Date</span>
+        <span class="info-value" style="color: #1f2937; font-size: 16px;">{{ appointment.date|date:"l, F j, Y" }}</span>
     </div>
     
-    <div class="info-item">
-        <span class="info-label">🕐 Time:</span>
-        <span class="info-value">{{ appointment.start_time|time:"g:i A" }}</span>
+    <div class="info-item" style="margin: 20px 0; padding-bottom: 20px; border-bottom: 1px solid #f3f4f6;">
+        <span class="info-label" style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Time</span>
+        <span class="info-value" style="color: #1f2937; font-size: 16px;">{{ appointment.start_time|time:"g:i A" }}</span>
     </div>
     
-    <div class="info-item">
-        <span class="info-label">💼 Type:</span>
-        <span class="info-value">{{ appointment.get_appointment_type_display|default:"In-Person" }}</span>
+    <div class="info-item" style="margin: 20px 0; padding-bottom: 20px; border-bottom: 1px solid #f3f4f6;">
+        <span class="info-label" style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Type</span>
+        <span class="info-value" style="color: #1f2937; font-size: 16px;">{{ appointment.get_appointment_type_display|default:"In-Person" }}</span>
     </div>
     
     {% if appointment.reason %}
-    <div class="info-item">
-        <span class="info-label">📋 Reason:</span>
-        <span class="info-value">{{ appointment.reason }}</span>
+    <div class="info-item" style="margin: 20px 0 0 0;">
+        <span class="info-label" style="font-weight: 600; color: #374151; display: block; margin-bottom: 6px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Reason</span>
+        <span class="info-value" style="color: #1f2937; font-size: 16px;">{{ appointment.reason }}</span>
     </div>
     {% endif %}
 </div>
 
 <!-- Virtual Appointment Notice -->
 {% if appointment.appointment_type == 'virtual' %}
-<div class="success-box">
-    <p style="margin: 0; color: #065f46; font-weight: 600;">
-        💻 This is a Virtual Appointment
+<div class="success-box" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 24px; margin: 32px 0; border-radius: 16px;">
+    <p style="margin: 0 0 8px 0; color: #166534; font-weight: 600; font-size: 16px;">
+        Virtual Appointment
     </p>
-    <p style="margin: 5px 0 0 0; color: #047857; font-size: 14px;">
+    <p style="margin: 0; color: #15803d; font-size: 15px; line-height: 1.6;">
         You'll be able to join the video call from the VitaNips app at your scheduled time.
     </p>
 </div>
 {% endif %}
 
-<!-- Action Buttons -->
-<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 25px 0;">
+<!-- Action Button -->
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 40px 0;">
     <tr>
         <td align="center">
-            <a href="https://vitanips.com/appointments/{{ appointment.id }}" class="button" style="background: linear-gradient(135deg, #32a852 0%, #267a3e 100%); color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 12px; font-weight: 600; display: inline-block; box-shadow: 0 4px 12px rgba(50, 168, 82, 0.3);">
-                View Appointment Details
+            <a href="https://vitanips.com/appointments/{{ appointment.id }}" class="button" style="background-color: #32a852; color: #ffffff; padding: 16px 32px; text-decoration: none; border-radius: 9999px; font-weight: 700; font-size: 16px; display: inline-block; box-shadow: 0 4px 12px rgba(50, 168, 82, 0.2);">
+                View Appointment
             </a>
         </td>
     </tr>
 </table>
 
 <!-- Important Notes -->
-<div class="alert-box">
-    <p style="margin: 0; color: #92400e; font-weight: 600;">
-        ⏰ Important Reminders:
+<div style="background-color: #fffbeb; border: 1px solid #fde68a; padding: 24px; margin: 32px 0; border-radius: 16px;">
+    <p style="margin: 0 0 16px 0; color: #92400e; font-weight: 600; font-size: 16px;">
+        Important reminders
     </p>
-    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #78350f;">
-        <li>Please arrive 10-15 minutes early for in-person appointments</li>
-        <li>Bring your insurance card and a valid ID</li>
-        <li>Prepare any questions you'd like to discuss with your doctor</li>
+    <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 15px; line-height: 1.8;">
+        <li style="margin-bottom: 8px;">Arrive 10-15 minutes early for in-person appointments</li>
+        <li style="margin-bottom: 8px;">Bring your insurance card and a valid ID</li>
+        <li style="margin-bottom: 8px;">Prepare any questions you'd like to discuss</li>
         {% if appointment.appointment_type == 'virtual' %}
-        <li>Ensure you have a stable internet connection for virtual appointments</li>
+        <li>Ensure you have a stable internet connection</li>
         {% endif %}
     </ul>
 </div>
 
-<hr class="divider">
+<hr class="divider" style="border: 0; border-top: 1px solid #e5e7eb; margin: 40px 0;">
 
 <!-- Need to Reschedule? -->
-<p style="font-size: 15px; color: #6b7280; margin: 20px 0 10px 0;">
-    <strong>Need to reschedule or cancel?</strong>
+<p style="font-size: 15px; color: #6b7280; margin: 0 0 8px 0; line-height: 1.6;">
+    <strong style="color: #1f2937;">Need to reschedule or cancel?</strong>
 </p>
-<p style="font-size: 15px; color: #6b7280; margin: 0;">
+<p style="font-size: 15px; color: #6b7280; margin: 0; line-height: 1.6;">
     Please log in to your VitaNips account or contact our support team at least 24 hours before your appointment time.
 </p>
 
 <!-- Closing -->
-<p style="margin-top: 30px; font-size: 16px; color: #1f2937;">
-    We look forward to seeing you!
-</p>
-
-<p style="margin: 5px 0 0 0; font-size: 16px; color: #4b5563;">
+<p style="margin-top: 32px; font-size: 16px; color: #1f2937; font-weight: 400; line-height: 1.6;">
     Best regards,<br>
-    <strong>The VitaNips Team</strong>
+    <span style="color: #32a852; font-weight: 600;">The VitaNips Team</span>
 </p>
 {% endblock %}
 
 {% block footer_text %}
 You're receiving this email because you have an upcoming appointment with VitaNips.<br>
-To manage your notification preferences, <a href="https://vitanips.com/settings/notifications" style="color: #32a852; font-weight: 500;">click here</a>.
+To manage your notification preferences, <a href="https://vitanips.com/settings/notifications" style="color: #32a852; font-weight: 500;">visit your account settings</a>.
 {% endblock %}
