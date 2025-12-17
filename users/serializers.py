@@ -104,20 +104,34 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user.registered_as_doctor = is_doctor
         user.save()
         
-        # Send welcome email asynchronously using Celery
+        # Send welcome email - try Celery first, fallback to synchronous if Celery unavailable
         try:
             import logging
+            from django.conf import settings
             logger = logging.getLogger(__name__)
             
-            logger.info(f"Queueing welcome email for user {user.id} ({user.email})")
-            send_welcome_email.delay(user.id)
-            logger.info(f"Welcome email task queued successfully for {user.email}")
+            # Check if Celery broker is configured
+            broker_url = getattr(settings, 'CELERY_BROKER_URL', None)
+            
+            if broker_url:
+                try:
+                    logger.info(f"Queueing welcome email via Celery for user {user.id} ({user.email})")
+                    send_welcome_email.delay(user.id)
+                    logger.info(f"Welcome email task queued successfully for {user.email}")
+                except Exception as celery_error:
+                    logger.warning(f"Celery task failed, sending email synchronously: {celery_error}")
+                    # Fallback to synchronous sending
+                    send_welcome_email(user.id)
+            else:
+                # No Celery broker configured, send synchronously
+                logger.info(f"Sending welcome email synchronously (no Celery broker) for {user.email}")
+                send_welcome_email(user.id)
                 
         except Exception as e:
-            # Log error but don't fail registration if email task fails
+            # Log error but don't fail registration if email fails
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Failed to queue welcome email for {user.email}: {e}", exc_info=True)
+            logger.error(f"Failed to send welcome email for {user.email}: {e}", exc_info=True)
         
         return user
 
