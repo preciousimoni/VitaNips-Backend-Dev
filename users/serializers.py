@@ -5,6 +5,7 @@ from .models import User, MedicalHistory, Vaccination
 from insurance.serializers import UserInsuranceSerializer
 from emergency.serializers import EmergencyContactSerializer
 from vitanips.core.utils import send_app_email
+from .tasks import send_welcome_email
 # from doctors.serializers import DoctorProfileSummarySerializer
 
 User = get_user_model()
@@ -103,23 +104,20 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         user.registered_as_doctor = is_doctor
         user.save()
         
-        # Send welcome email
+        # Send welcome email asynchronously using Celery
         try:
-            context = {
-                'user': user,
-                'subject': 'Welcome to VitaNips! 🎉'
-            }
-            send_app_email(
-                to_email=user.email,
-                subject=context['subject'],
-                template_name='emails/welcome.html',
-                context=context
-            )
-        except Exception as e:
-            # Log error but don't fail registration if email fails
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Failed to send welcome email to {user.email}: {e}")
+            
+            logger.info(f"Queueing welcome email for user {user.id} ({user.email})")
+            send_welcome_email.delay(user.id)
+            logger.info(f"Welcome email task queued successfully for {user.email}")
+                
+        except Exception as e:
+            # Log error but don't fail registration if email task fails
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to queue welcome email for {user.email}: {e}", exc_info=True)
         
         return user
 
