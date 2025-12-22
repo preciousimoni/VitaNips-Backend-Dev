@@ -11,12 +11,13 @@ from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VideoGrant
 from notifications.utils import create_notification
 from .permissions import IsDoctorUser, IsDoctorAssociatedWithAppointment, IsPrescribingDoctor
-from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem
+from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem, TestRequest
 from .serializers import (
     SpecialtySerializer, DoctorSerializer, DoctorReviewSerializer,
     DoctorAvailabilitySerializer, AppointmentSerializer, PrescriptionSerializer,
     DoctorPrescriptionCreateSerializer, DoctorPrescriptionListDetailSerializer,
-    DoctorEligibleAppointmentSerializer, DoctorApplicationSerializer
+    DoctorEligibleAppointmentSerializer, DoctorApplicationSerializer,
+    TestRequestSerializer, TestRequestCreateSerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -202,9 +203,19 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         # If user is a doctor, show appointments where they are the doctor
         if hasattr(user, 'doctor_profile') and user.doctor_profile:
-            return Appointment.objects.filter(doctor=user.doctor_profile)
+            queryset = Appointment.objects.filter(doctor=user.doctor_profile).select_related('user', 'doctor', 'original_appointment').order_by('-date', '-start_time')
+            logger.info(f"Doctor {user.id} ({user.email}) viewing appointments. Doctor profile ID: {user.doctor_profile.id}. Found {queryset.count()} appointments.")
+            # Log first few appointments for debugging
+            for apt in queryset[:3]:
+                logger.debug(f"  - Appointment {apt.id}: Patient {apt.user.id if apt.user else 'None'}, Doctor {apt.doctor.id if apt.doctor else 'None'}, Status: {apt.status}")
+            return queryset
         # Otherwise, show appointments where they are the patient
-        return Appointment.objects.filter(user=user)
+        queryset = Appointment.objects.filter(user=user).select_related('user', 'doctor', 'original_appointment').order_by('-date', '-start_time')
+        logger.info(f"Patient {user.id} ({user.email}) viewing appointments. Found {queryset.count()} appointments.")
+        # Log first few appointments for debugging
+        for apt in queryset[:3]:
+            logger.debug(f"  - Appointment {apt.id}: Patient {apt.user.id if apt.user else 'None'}, Doctor {apt.doctor.id if apt.doctor else 'None'}, Status: {apt.status}")
+        return queryset
 
     def perform_create(self, serializer):
         # Check subscription limits before creating appointment
@@ -260,7 +271,11 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
         # Handle insurance if provided
         user_insurance_id = serializer.validated_data.pop('user_insurance_id', None)
         payment_reference = serializer.validated_data.pop('payment_reference', None)
+        original_appointment_id = serializer.validated_data.pop('original_appointment_id', None)
+        test_request_id = serializer.validated_data.pop('test_request_id', None)
+        logger.info(f"Creating appointment - test_request_id: {test_request_id}, original_appointment_id: {original_appointment_id}, user: {self.request.user.id}")
         user_insurance = None
+        original_appointment = None
         
         if user_insurance_id:
             from insurance.models import UserInsurance
@@ -269,11 +284,33 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
             except UserInsurance.DoesNotExist:
                 pass  # Continue without insurance if invalid
         
+        # Handle follow-up appointment
+        is_followup = False
+        if original_appointment_id:
+            try:
+                original_appointment = Appointment.objects.get(
+                    id=original_appointment_id,
+                    user=self.request.user
+                )
+                is_followup = True
+            except Appointment.DoesNotExist:
+                pass  # Continue without original appointment if invalid
+        
         # Check if payment is required
         doctor = serializer.validated_data.get('doctor')
+        if not doctor:
+            raise serializers.ValidationError({'doctor': 'Doctor is required to create an appointment.'})
+        
         consultation_fee = None
         if doctor and doctor.consultation_fee:
             consultation_fee = doctor.consultation_fee
+            
+            # Apply follow-up discount (default 50%)
+            if is_followup:
+                from decimal import Decimal
+                discount_percentage = Decimal('50.00')  # Default 50% discount
+                discount_amount = (consultation_fee * discount_percentage) / Decimal('100')
+                consultation_fee = consultation_fee - discount_amount
         
         # If no insurance and consultation fee exists, payment is required
         if not user_insurance and consultation_fee and consultation_fee > 0:
@@ -282,22 +319,30 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
             payment_status = 'paid' if payment_reference else 'pending'
             appointment = serializer.save(
                 user=self.request.user,
+                doctor=doctor,  # Explicitly set doctor to ensure it's saved
                 user_insurance=user_insurance,
                 payment_reference=payment_reference if payment_reference else None,
                 payment_status=payment_status,
-                consultation_fee=consultation_fee
+                consultation_fee=consultation_fee,
+                is_followup=is_followup,
+                original_appointment=original_appointment
             )
+            logger.info(f"Appointment {appointment.id} created for patient {self.request.user.id} with doctor {doctor.id} ({doctor.full_name}). Status: {appointment.status}, Payment: {payment_status}")
         else:
             # With insurance or no fee - payment not required
             # Set payment_status based on whether payment_reference exists
             payment_status = 'paid' if payment_reference else 'pending'
             appointment = serializer.save(
                 user=self.request.user,
+                doctor=doctor,  # Explicitly set doctor to ensure it's saved
                 user_insurance=user_insurance,
                 payment_reference=payment_reference if payment_reference else None,
                 payment_status=payment_status,
-                consultation_fee=consultation_fee if consultation_fee else None
+                consultation_fee=consultation_fee if consultation_fee else None,
+                is_followup=is_followup,
+                original_appointment=original_appointment
             )
+            logger.info(f"Appointment {appointment.id} created for patient {self.request.user.id} with doctor {doctor.id} ({doctor.full_name}). Status: {appointment.status}, Payment: {payment_status}")
         
         # Calculate insurance coverage if insurance is selected
         if user_insurance and appointment.consultation_fee:
@@ -319,7 +364,29 @@ class AppointmentListCreateView(generics.ListCreateAPIView):
             except Exception as e:
                 logger.error(f"Error calculating insurance coverage for appointment: {e}", exc_info=True)
                 # Continue without insurance coverage if calculation fails
-
+        
+        # Link test request to follow-up appointment if provided
+        if test_request_id and appointment:
+            try:
+                logger.info(f"Attempting to link test request {test_request_id} to follow-up appointment {appointment.id} for user {self.request.user.id}")
+                test_request = TestRequest.objects.get(
+                    id=test_request_id,
+                    patient=self.request.user
+                )
+                test_request.followup_appointment = appointment
+                test_request.save()
+                logger.info(f"Successfully linked test request {test_request_id} to follow-up appointment {appointment.id}")
+                # Refresh from DB to ensure the relationship is saved
+                test_request.refresh_from_db()
+                logger.info(f"Verified: test request {test_request_id} followup_appointment is now {test_request.followup_appointment.id if test_request.followup_appointment else None}")
+            except TestRequest.DoesNotExist:
+                logger.warning(f"Test request {test_request_id} not found or doesn't belong to user {self.request.user.id}")
+            except Exception as e:
+                logger.error(f"Error linking test request to appointment: {e}", exc_info=True)
+        
+        # Note: ListCreateAPIView automatically returns the created object
+        # We just need to ensure the appointment is saved, which we've done above
+        
 class DoctorBankDetailsView(views.APIView):
     """
     View for doctors to submit and view bank details.
@@ -735,14 +802,14 @@ class PrescriptionListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Prescription.objects.filter(user=self.request.user)
+        return Prescription.objects.filter(user=self.request.user).order_by('-date_prescribed')
     
 class PrescriptionDetailView(generics.RetrieveAPIView):
     serializer_class = PrescriptionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Prescription.objects.filter(user=self.request.user)
+        return Prescription.objects.filter(user=self.request.user).order_by('-date_prescribed')
 
 
 class ForwardPrescriptionView(views.APIView):
@@ -926,3 +993,130 @@ class DoctorPrescriptionViewSet(viewsets.ModelViewSet):
             action_text="View Prescription"
         )
         print(f"New prescription notification created for user {patient.id} for prescription {prescription.id}")
+
+
+class TestRequestListCreateView(generics.ListCreateAPIView):
+    """
+    View for doctors to create and list test requests.
+    GET: List all test requests for the authenticated doctor
+    POST: Create a new test request
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return TestRequestCreateSerializer
+        return TestRequestSerializer
+    
+    def get_queryset(self):
+        """Return test requests for the authenticated doctor"""
+        doctor_profile = self.request.user.doctor_profile
+        return TestRequest.objects.filter(doctor=doctor_profile).order_by('-requested_at')
+    
+    def perform_create(self, serializer):
+        """Create test request and notify patient"""
+        test_request = serializer.save()
+        
+        # Notify patient
+        patient = test_request.patient
+        doctor_name = test_request.doctor.full_name
+        appointment_date = test_request.appointment.date.strftime('%b %d') if test_request.appointment.date else "your appointment"
+        
+        create_notification(
+            recipient=patient,
+            actor=self.request.user,
+            verb=f"{doctor_name} has requested a {test_request.test_name} test. Please complete the test and upload the results.",
+            title=f"Test Request: {test_request.test_name}",
+            level='info',
+            category='test_request',
+            action_url=f"/test-requests/{test_request.id}",
+            action_text="View Test Request"
+        )
+        
+        logger.info(f"Test request {test_request.id} created by doctor {self.request.user.id} for patient {patient.id}")
+
+
+class TestRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    View for doctors to retrieve, update, or delete test requests.
+    Patients can also retrieve their own test requests.
+    """
+    serializer_class = TestRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Return test requests based on user role"""
+        user = self.request.user
+        
+        # If user is a doctor, return their test requests
+        if hasattr(user, 'doctor_profile'):
+            return TestRequest.objects.filter(doctor=user.doctor_profile)
+        
+        # If user is a patient, return their test requests
+        return TestRequest.objects.filter(patient=user)
+    
+    def perform_update(self, serializer):
+        """Update test request and handle status changes"""
+        old_instance = self.get_object()
+        new_instance = serializer.save()
+        
+        # If status changed to completed, set completed_at
+        if old_instance.status != new_instance.status and new_instance.status == 'completed':
+            from django.utils import timezone
+            new_instance.completed_at = timezone.now()
+            new_instance.save()
+            
+            # Notify doctor if patient completed the test
+            if not hasattr(self.request.user, 'doctor_profile'):  # Patient updated
+                doctor = new_instance.doctor
+                if doctor and hasattr(doctor, 'user') and doctor.user:
+                    create_notification(
+                        recipient=doctor.user,
+                        actor=self.request.user,
+                        verb=f"Patient {self.request.user.get_full_name() or self.request.user.username} has marked test '{new_instance.test_name}' as completed.",
+                        title=f"Test Completed: {new_instance.test_name}",
+                        level='success',
+                        category='test_request',
+                        action_url=f"/portal/test-requests/{new_instance.id}",
+                        action_text="View Test Request"
+                    )
+
+
+class PatientTestRequestListView(generics.ListAPIView):
+    """
+    View for patients to list their test requests.
+    GET /api/doctors/test-requests/my-requests/
+    """
+    serializer_class = TestRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Return test requests for the authenticated patient"""
+        return TestRequest.objects.filter(patient=self.request.user).order_by('-requested_at')
+
+
+class TestRequestResultsView(generics.ListAPIView):
+    """
+    View for doctors to get test results (documents) for a specific test request.
+    GET /api/doctors/test-requests/<pk>/results/
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDoctorUser]
+    
+    def get_queryset(self):
+        """Return medical documents linked to this test request"""
+        from health.models import MedicalDocument
+        test_request_id = self.kwargs.get('pk')
+        doctor_profile = self.request.user.doctor_profile
+        
+        # Verify the test request belongs to this doctor
+        try:
+            test_request = TestRequest.objects.get(id=test_request_id, doctor=doctor_profile)
+        except TestRequest.DoesNotExist:
+            return MedicalDocument.objects.none()
+        
+        # Return documents linked to this test request, sorted by most recent first
+        return MedicalDocument.objects.filter(test_request=test_request).order_by('-uploaded_at')
+    
+    def get_serializer_class(self):
+        from health.serializers import MedicalDocumentSerializer
+        return MedicalDocumentSerializer

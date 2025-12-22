@@ -184,6 +184,14 @@ class MedicalDocument(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='medical_documents', help_text="The patient this document belongs to.")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='uploaded_documents', help_text="User who uploaded the document (patient or doctor).")
     appointment = models.ForeignKey(Appointment, on_delete=models.SET_NULL, null=True, blank=True, related_name='documents')
+    test_request = models.ForeignKey(
+        'doctors.TestRequest',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='test_results',
+        help_text="Link to test request if this document is a test result"
+    )
     file = models.FileField(upload_to=user_directory_path, help_text="The actual uploaded file.")
     description = models.CharField( max_length=255, null=True, blank=True, help_text="Brief description or title of the document.")
     document_type = models.CharField(max_length=50, null=True, blank=True, help_text="e.g., Lab Result, Scan, Report, Prescription Image")

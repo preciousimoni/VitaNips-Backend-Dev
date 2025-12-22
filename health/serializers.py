@@ -87,12 +87,18 @@ class HealthInsightSerializer(serializers.ModelSerializer):
 class MedicalDocumentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     filename = serializers.SerializerMethodField()
+    test_request_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="ID of the test request this document is a result for"
+    )
 
     class Meta:
         model = MedicalDocument
         fields = [
-            'id', 'user', 'uploaded_by', 'appointment', 'file', 'file_url',
-            'filename', 'description', 'document_type', 'uploaded_at',
+            'id', 'user', 'uploaded_by', 'appointment', 'test_request', 'test_request_id',
+            'file', 'file_url', 'filename', 'description', 'document_type', 'uploaded_at',
         ]
         read_only_fields = [
             'user',
@@ -100,7 +106,24 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
             'uploaded_at',
             'file_url',
             'filename',
+            'test_request',
         ]
+
+    def validate_test_request_id(self, value):
+        """Validate that the test request belongs to the user"""
+        if value is None:
+            return value
+        
+        request = self.context.get('request')
+        if not request or not request.user:
+            raise serializers.ValidationError("User must be authenticated.")
+        
+        from doctors.models import TestRequest
+        try:
+            test_request = TestRequest.objects.get(id=value, patient=request.user)
+            return value
+        except TestRequest.DoesNotExist:
+            raise serializers.ValidationError("Test request not found or does not belong to you.")
 
     def get_file_url(self, obj):
         request = self.context.get('request')
@@ -121,3 +144,10 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
             except Exception:
                 return str(obj.file)
         return None
+    
+    def to_representation(self, instance):
+        """Include test_request ID in the response"""
+        representation = super().to_representation(instance)
+        if instance.test_request:
+            representation['test_request'] = instance.test_request.id
+        return representation

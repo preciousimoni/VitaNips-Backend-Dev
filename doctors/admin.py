@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem, VirtualSession
+from .models import Specialty, Doctor, DoctorReview, DoctorAvailability, Appointment, Prescription, PrescriptionItem, VirtualSession, TestRequest
 
 @admin.register(Specialty)
 class SpecialtyAdmin(admin.ModelAdmin):
@@ -141,6 +141,26 @@ class VirtualSessionAdmin(admin.ModelAdmin):
         ('Recording', {
             'fields': ('recording_url', 'notes'),
             'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+@admin.register(TestRequest)
+class TestRequestAdmin(admin.ModelAdmin):
+    list_display = ('id', 'test_name', 'patient', 'doctor', 'appointment', 'status', 'requested_at', 'completed_at')
+    search_fields = ('test_name', 'patient__email', 'doctor__first_name', 'doctor__last_name', 'test_description')
+    list_filter = ('status', 'requested_at', 'completed_at')
+    ordering = ('-requested_at',)
+    readonly_fields = ('requested_at', 'created_at', 'updated_at')
+    fieldsets = (
+        ('Test Request Details', {
+            'fields': ('appointment', 'doctor', 'patient', 'test_name', 'test_description', 'instructions', 'notes')
+        }),
+        ('Status', {
+            'fields': ('status', 'requested_at', 'completed_at', 'followup_appointment')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

@@ -208,6 +208,26 @@ class Appointment(models.Model):
     notes = models.TextField(blank=True, null=True)
     followup_required = models.BooleanField(default=False)
     
+    # Follow-up appointment fields
+    is_followup = models.BooleanField(
+        default=False,
+        help_text="Whether this is a follow-up appointment"
+    )
+    original_appointment = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='followup_appointments',
+        help_text="Original appointment this follow-up is for"
+    )
+    followup_discount_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('50.00'),
+        help_text="Discount percentage for follow-up appointments (default 50%)"
+    )
+    
     # Insurance fields
     user_insurance = models.ForeignKey('insurance.UserInsurance', on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments', help_text="Insurance plan used for this appointment")
     consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total consultation fee")
@@ -256,7 +276,7 @@ class PrescriptionItem(models.Model):
     dosage = models.CharField(max_length=100)
     frequency = models.CharField(max_length=100)
     duration = models.CharField(max_length=100)
-    instructions = models.TextField()
+    instructions = models.TextField(blank=True, default='')
     
     def __str__(self):
         return f"{self.medication_name} ({self.medication.name if self.medication else 'N/A'}) - {self.dosage}"
@@ -320,3 +340,82 @@ class VirtualSession(models.Model):
         ordering = ['-created_at']
         verbose_name = "Virtual Session"
         verbose_name_plural = "Virtual Sessions"
+
+
+class TestRequest(models.Model):
+    """
+    Model for doctors to request tests from patients.
+    Test requests are recommendations, not mandatory.
+    """
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    )
+    
+    appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name='test_requests',
+        help_text="The appointment during which this test was requested"
+    )
+    doctor = models.ForeignKey(
+        Doctor,
+        on_delete=models.CASCADE,
+        related_name='test_requests',
+        help_text="Doctor who requested the test"
+    )
+    patient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='test_requests',
+        help_text="Patient who needs to take the test"
+    )
+    test_name = models.CharField(
+        max_length=200,
+        help_text="Name of the test (e.g., 'Blood Test', 'X-Ray', 'CT Scan')"
+    )
+    test_description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Detailed description of what the test is for and why it's needed"
+    )
+    instructions = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Instructions for the patient (e.g., 'Fasting required', 'No food 8 hours before')"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text="Status of the test request"
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Additional notes from the doctor"
+    )
+    
+    # Link to follow-up appointment if needed
+    followup_appointment = models.ForeignKey(
+        Appointment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='test_followup_for',
+        help_text="Follow-up appointment scheduled after test results are received"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.test_name} for {self.patient.email} - {self.get_status_display()}"
+    
+    class Meta:
+        ordering = ['-requested_at']
+        verbose_name = "Test Request"
+        verbose_name_plural = "Test Requests"

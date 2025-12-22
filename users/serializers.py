@@ -1,6 +1,8 @@
 # users/serializers.py
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.conf import settings
+from django.contrib.auth.forms import PasswordResetForm
 from .models import User, MedicalHistory, Vaccination
 from insurance.serializers import UserInsuranceSerializer
 from emergency.serializers import EmergencyContactSerializer
@@ -167,3 +169,30 @@ class MedicalHistorySerializer(serializers.ModelSerializer):
         model = MedicalHistory
         fields = '__all__'
         read_only_fields = ['user', 'created_at', 'updated_at']
+
+
+# Custom Password Reset Serializer to use frontend URL
+class CustomPasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def save(self):
+        from django.contrib.auth.forms import PasswordResetForm
+        from django.conf import settings
+        request = self.context.get('request')
+        
+        form = PasswordResetForm(self.validated_data)
+        if form.is_valid():
+            # Override the password reset URL to use frontend URL
+            opts = {
+                'use_https': request.is_secure() if request else False,
+                'from_email': getattr(settings, 'DEFAULT_FROM_EMAIL'),
+                'email_template_name': 'registration/password_reset_email.html',
+                'subject_template_name': 'registration/password_reset_subject.txt',
+                'request': request,
+                'html_email_template_name': 'registration/password_reset_email.html',
+                'extra_email_context': {
+                    'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:5173'),
+                }
+            }
+            # Customize the reset URL
+            form.save(**opts)

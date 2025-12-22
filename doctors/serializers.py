@@ -161,6 +161,51 @@ class DoctorAvailabilitySerializer(serializers.ModelSerializer):
         model = DoctorAvailability
         fields = ['id', 'doctor', 'day_of_week', 'start_time', 'end_time', 'is_available']
         read_only_fields = ['doctor']
+    
+    def validate_start_time(self, value):
+        """Ensure start_time is in correct format"""
+        if isinstance(value, str):
+            # Handle "HH:MM" format by converting to "HH:MM:SS"
+            if len(value) == 5 and value.count(':') == 1:
+                return f"{value}:00"
+        return value
+    
+    def validate_end_time(self, value):
+        """Ensure end_time is in correct format"""
+        if isinstance(value, str):
+            # Handle "HH:MM" format by converting to "HH:MM:SS"
+            if len(value) == 5 and value.count(':') == 1:
+                return f"{value}:00"
+        return value
+    
+    def validate(self, data):
+        """Validate that end_time is after start_time"""
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+        
+        if start_time and end_time:
+            # Convert to time objects for comparison
+            from datetime import datetime
+            try:
+                if isinstance(start_time, str):
+                    start = datetime.strptime(start_time, '%H:%M:%S').time()
+                else:
+                    start = start_time
+                
+                if isinstance(end_time, str):
+                    end = datetime.strptime(end_time, '%H:%M:%S').time()
+                else:
+                    end = end_time
+                
+                if start >= end:
+                    raise serializers.ValidationError({
+                        'end_time': 'End time must be after start time.'
+                    })
+            except ValueError:
+                # If parsing fails, let Django handle the validation
+                pass
+        
+        return data
 
 class AppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.SerializerMethodField(read_only=True)
@@ -180,6 +225,23 @@ class AppointmentSerializer(serializers.ModelSerializer):
         help_text="Payment reference/transaction ID from payment gateway"
     )
     payment_status = serializers.SerializerMethodField(read_only=True)
+    original_appointment_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="ID of the original appointment if this is a follow-up"
+    )
+    test_request_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="ID of the test request to link this follow-up appointment to"
+    )
+    is_followup = serializers.BooleanField(read_only=True)
+    original_appointment = serializers.IntegerField(source='original_appointment.id', read_only=True, allow_null=True)
+    followup_discount_percentage = serializers.DecimalField(read_only=True, max_digits=5, decimal_places=2)
+    linked_test_request = serializers.SerializerMethodField(read_only=True, required=False)
+    test_results = serializers.SerializerMethodField(read_only=True, required=False)
     
     class Meta:
         model = Appointment
@@ -190,12 +252,16 @@ class AppointmentSerializer(serializers.ModelSerializer):
             'user_insurance', 'user_insurance_id', 'consultation_fee',
             'insurance_covered_amount', 'patient_copay', 'insurance_claim_generated',
             'payment_reference', 'payment_status',
+            'is_followup', 'original_appointment_id', 'original_appointment',
+            'test_request_id', 'followup_discount_percentage',
+            'linked_test_request', 'test_results',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'user', 'patient_name', 'patient_email', 'doctor_name',
             'user_insurance', 'consultation_fee', 'insurance_covered_amount',
             'patient_copay', 'insurance_claim_generated',
+            'is_followup', 'original_appointment', 'followup_discount_percentage',
             'created_at', 'updated_at'
         ]
     
@@ -248,6 +314,162 @@ class AppointmentSerializer(serializers.ModelSerializer):
         except (AttributeError, TypeError):
             return None
 
+    def get_linked_test_request(self, obj):
+        """Get test request linked to this follow-up appointment"""
+        # Early return if not a follow-up - check multiple ways to be safe
+        try:
+            # Check is_followup field
+            is_followup = False
+            if hasattr(obj, 'is_followup'):
+                is_followup = bool(obj.is_followup)
+            # Also check original_appointment as fallback
+            if not is_followup and hasattr(obj, 'original_appointment'):
+                try:
+                    is_followup = obj.original_appointment is not None
+                except Exception:
+                    pass
+            
+            if not is_followup:
+                return None
+        except Exception:
+            return None
+            
+        try:
+            from .models import TestRequest
+            from health.models import MedicalDocument
+            
+            # Use get() with a try-except to avoid errors if no test request exists
+            try:
+                test_request = TestRequest.objects.filter(followup_appointment=obj).select_related('doctor', 'patient', 'appointment').first()
+                if not test_request:
+                    return None
+            except Exception:
+                return None
+                
+            # Count test results directly to avoid related manager issues
+            try:
+                results_count = MedicalDocument.objects.filter(test_request=test_request).count()
+            except Exception:
+                results_count = 0
+            
+            # Return minimal data to avoid circular serialization issues
+            return {
+                'id': test_request.id,
+                'test_name': getattr(test_request, 'test_name', ''),
+                'test_description': getattr(test_request, 'test_description', None),
+                'instructions': getattr(test_request, 'instructions', None),
+                'status': getattr(test_request, 'status', 'pending'),
+                'has_test_results': results_count > 0,
+                'test_results_count': results_count,
+            }
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting linked test request for appointment {getattr(obj, 'id', 'unknown')}: {e}", exc_info=True)
+        return None
+
+    def get_test_results(self, obj):
+        """Get test results (documents) for this follow-up appointment's test request"""
+        # Return empty list immediately if any error occurs - be very defensive
+        try:
+            # Check if this is a follow-up appointment - multiple checks
+            is_followup = False
+            try:
+                if hasattr(obj, 'is_followup'):
+                    is_followup = bool(obj.is_followup)
+            except (AttributeError, TypeError):
+                pass
+            
+            # Fallback check
+            if not is_followup:
+                try:
+                    if hasattr(obj, 'original_appointment_id') and obj.original_appointment_id:
+                        is_followup = True
+                    elif hasattr(obj, 'original_appointment') and obj.original_appointment:
+                        is_followup = True
+                except (AttributeError, TypeError):
+                    pass
+            
+            if not is_followup:
+                return []
+            
+            # Only proceed if it's a follow-up
+            from .models import TestRequest
+            from health.models import MedicalDocument
+            
+            # Get test request - use try-except for safety
+            test_request = None
+            try:
+                test_request = TestRequest.objects.filter(followup_appointment_id=obj.id).first()
+            except Exception:
+                try:
+                    test_request = TestRequest.objects.filter(followup_appointment=obj).first()
+                except Exception:
+                    return []
+            
+            if not test_request:
+                return []
+            
+            # Get documents
+            documents = []
+            try:
+                documents = list(MedicalDocument.objects.filter(test_request_id=test_request.id).order_by('-uploaded_at')[:10])  # Limit to 10
+            except Exception:
+                return []
+                
+            # Return minimal data
+            results = []
+            request = self.context.get('request') if self.context else None
+            
+            for doc in documents:
+                try:
+                    file_url = None
+                    if hasattr(doc, 'file') and doc.file:
+                        try:
+                            if request:
+                                file_url = request.build_absolute_uri(doc.file.url)
+                            else:
+                                file_url = doc.file.url
+                        except Exception:
+                            pass
+                    
+                    filename = None
+                    if hasattr(doc, 'file') and doc.file:
+                        try:
+                            filename = doc.file.name.split('/')[-1]
+                        except Exception:
+                            try:
+                                filename = str(doc.file)
+                            except Exception:
+                                filename = None
+                    
+                    uploaded_at = None
+                    if hasattr(doc, 'uploaded_at') and doc.uploaded_at:
+                        try:
+                            uploaded_at = doc.uploaded_at.isoformat()
+                        except Exception:
+                            pass
+                    
+                    results.append({
+                        'id': getattr(doc, 'id', None),
+                        'file_url': file_url,
+                        'filename': filename,
+                        'description': getattr(doc, 'description', None),
+                        'document_type': getattr(doc, 'document_type', None),
+                        'uploaded_at': uploaded_at,
+                    })
+                except Exception:
+                    # Skip this document if there's an error
+                    continue
+                    
+            return results
+        except Exception as e:
+            # Log but don't fail - return empty list to allow serialization to continue
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error in get_test_results for appointment {getattr(obj, 'id', 'unknown')}: {e}", exc_info=True)
+            return []
+
     def validate(self, data):
         instance = getattr(self, 'instance', None)
 
@@ -268,6 +490,7 @@ class DoctorPrescriptionItemCreateSerializer(serializers.ModelSerializer):
         write_only=True, required=True,
         help_text="Name of the medication. A Medication object will be looked up or created."
     )
+    instructions = serializers.CharField(required=False, allow_blank=True, default='')
     # medication_id = serializers.PrimaryKeyRelatedField(queryset=Medication.objects.all(), source='medication', required=False, allow_null=True)
 
     class Meta:
@@ -490,3 +713,94 @@ class VirtualSessionSerializer(serializers.ModelSerializer):
         if obj.appointment:
             return obj.appointment.date_time.isoformat() if hasattr(obj.appointment, 'date_time') else str(obj.appointment.date)
         return None
+
+
+class TestRequestSerializer(serializers.ModelSerializer):
+    """Serializer for TestRequest model"""
+    patient_name = serializers.SerializerMethodField(read_only=True)
+    patient_email = serializers.EmailField(source='patient.email', read_only=True)
+    doctor_name = serializers.SerializerMethodField(read_only=True)
+    appointment_date = serializers.DateField(source='appointment.date', read_only=True)
+    has_test_results = serializers.SerializerMethodField(read_only=True)
+    test_results_count = serializers.SerializerMethodField(read_only=True)
+    
+    class Meta:
+        from .models import TestRequest
+        model = TestRequest
+        fields = [
+            'id', 'appointment', 'appointment_date', 'doctor', 'doctor_name',
+            'patient', 'patient_name', 'patient_email', 'test_name',
+            'test_description', 'instructions', 'status', 'requested_at',
+            'completed_at', 'notes', 'followup_appointment',
+            'has_test_results', 'test_results_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'doctor', 'patient', 'requested_at', 'completed_at',
+            'patient_name', 'patient_email', 'doctor_name', 'appointment_date',
+            'has_test_results', 'test_results_count',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_patient_name(self, obj):
+        if obj.patient:
+            return f"{obj.patient.first_name} {obj.patient.last_name}".strip() or obj.patient.username
+        return "N/A"
+    
+    def get_doctor_name(self, obj):
+        if obj.doctor:
+            return obj.doctor.full_name
+        return "N/A"
+    
+    def get_has_test_results(self, obj):
+        """Check if test results have been uploaded"""
+        return obj.test_results.exists() if hasattr(obj, 'test_results') else False
+    
+    def get_test_results_count(self, obj):
+        """Get count of uploaded test results"""
+        return obj.test_results.count() if hasattr(obj, 'test_results') else 0
+
+
+class TestRequestCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating test requests (doctor only)"""
+    appointment_id = serializers.IntegerField(
+        write_only=True,
+        help_text="ID of the appointment this test request is for"
+    )
+    
+    class Meta:
+        from .models import TestRequest
+        model = TestRequest
+        fields = [
+            'appointment_id', 'test_name', 'test_description',
+            'instructions', 'notes'
+        ]
+    
+    def validate_appointment_id(self, value):
+        """Validate that the appointment belongs to the doctor"""
+        request = self.context.get('request')
+        if not request or not hasattr(request.user, 'doctor_profile'):
+            raise serializers.ValidationError("Only doctors can create test requests.")
+        
+        from .models import Appointment
+        try:
+            appointment = Appointment.objects.get(id=value, doctor=request.user.doctor_profile)
+        except Appointment.DoesNotExist:
+            raise serializers.ValidationError("Appointment not found or not assigned to you.")
+        
+        return value
+    
+    def create(self, validated_data):
+        appointment_id = validated_data.pop('appointment_id')
+        from .models import Appointment, TestRequest
+        appointment = Appointment.objects.get(id=appointment_id)
+        request = self.context.get('request')
+        
+        test_request = TestRequest.objects.create(
+            appointment=appointment,
+            doctor=request.user.doctor_profile,
+            patient=appointment.user,
+            **validated_data
+        )
+        
+        return test_request

@@ -10,6 +10,7 @@ from .views import (
     PrescriptionListView, PrescriptionDetailView, ForwardPrescriptionView,
     GetTwilioTokenView, DoctorEligibleAppointmentListView,
     DoctorPrescriptionViewSet, DoctorApplicationView, DoctorBankDetailsView, DoctorVerifyBankAccountView,
+    TestRequestListCreateView, TestRequestDetailView, PatientTestRequestListView, TestRequestResultsView,
 )
 from .video_views import (
     GenerateVideoTokenView, EndVideoSessionView,
@@ -42,6 +43,12 @@ urlpatterns = [
     path('prescriptions/', PrescriptionListView.as_view(), name='prescription-list'),
     path('prescriptions/<int:pk>/', PrescriptionDetailView.as_view(), name='prescription-detail'),
     path('prescriptions/<int:pk>/forward/', ForwardPrescriptionView.as_view(), name='prescription-forward'),
+    
+    # Test Request endpoints
+    path('test-requests/', TestRequestListCreateView.as_view(), name='test-request-list-create'),
+    path('test-requests/my-requests/', PatientTestRequestListView.as_view(), name='patient-test-request-list'),
+    path('test-requests/<int:pk>/', TestRequestDetailView.as_view(), name='test-request-detail'),
+    path('test-requests/<int:pk>/results/', TestRequestResultsView.as_view(), name='test-request-results'),
     
     # Doctor Portal endpoints
     path('portal/eligible-appointments-for-prescription/', DoctorEligibleAppointmentListView.as_view(), name='doctor-eligible-appointments'),
