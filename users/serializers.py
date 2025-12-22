@@ -178,21 +178,48 @@ class CustomPasswordResetSerializer(serializers.Serializer):
     def save(self):
         from django.contrib.auth.forms import PasswordResetForm
         from django.conf import settings
-        request = self.context.get('request')
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+        from django.core.mail import send_mail
+        from django.template.loader import render_to_string
+        from django.contrib.auth import get_user_model
         
-        form = PasswordResetForm(self.validated_data)
-        if form.is_valid():
-            # Override the password reset URL to use frontend URL
-            opts = {
-                'use_https': request.is_secure() if request else False,
-                'from_email': getattr(settings, 'DEFAULT_FROM_EMAIL'),
-                'email_template_name': 'registration/password_reset_email.html',
-                'subject_template_name': 'registration/password_reset_subject.txt',
-                'request': request,
-                'html_email_template_name': 'registration/password_reset_email.html',
-                'extra_email_context': {
-                    'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:5173'),
-                }
-            }
-            # Customize the reset URL
-            form.save(**opts)
+        User = get_user_model()
+        request = self.context.get('request')
+        email = self.validated_data['email']
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Don't reveal if email exists or not (security best practice)
+            return
+        
+        # Generate password reset token
+        token = default_token_generator.make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        
+        # Prepare email context
+        context = {
+            'user': user,
+            'uid': uid,
+            'token': token,
+            'frontend_url': frontend_url,
+            'protocol': 'https' if (request and request.is_secure()) else 'http',
+        }
+        
+        # Render email templates
+        subject = render_to_string('registration/password_reset_subject.txt', context)
+        subject = ''.join(subject.splitlines())  # Remove newlines
+        message_html = render_to_string('registration/password_reset_email.html', context)
+        
+        # Send email
+        send_mail(
+            subject=subject,
+            message='',  # Empty plain text message since we're using HTML
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL'),
+            recipient_list=[email],
+            html_message=message_html,
+            fail_silently=False,
+        )
